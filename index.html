@@ -356,6 +356,15 @@ hr {
 }
 .mi:focus { border-color: var(--text); }
 .m2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mi[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 14px 10px;
+  cursor: pointer;
+}
 .prev {
   background: var(--bg2); border-radius: 10px;
   padding: 12px 14px; margin-bottom: 14px; display: none;
@@ -558,9 +567,15 @@ hr {
     <div class="m-handle"></div>
     <div class="m-ttl">Přidat směnu</div>
     <div class="m-sub" id="m-sub"></div>
-    <div class="m2">
-      <div class="mg"><label class="ml">Od</label><input type="time" class="mi" id="m-s" value="11:00" oninput="prevShift()"></div>
-      <div class="mg"><label class="ml">Do</label><input type="time" class="mi" id="m-e" value="23:00" oninput="prevShift()"></div>
+    <div class="m2" style="margin-bottom:14px">
+      <div>
+        <label class="ml">Od</label>
+        <input type="time" class="mi" id="m-s" value="11:00" oninput="prevShift()">
+      </div>
+      <div>
+        <label class="ml">Do</label>
+        <input type="time" class="mi" id="m-e" value="23:00" oninput="prevShift()">
+      </div>
     </div>
     <div class="mg"><label class="ml">Poznámka</label><input type="text" class="mi" id="m-n" placeholder="Höfn kuchyň…"></div>
     <div class="prev" id="prev">
