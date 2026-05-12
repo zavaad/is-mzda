@@ -963,8 +963,13 @@ async function saveShift() {
 
   if (URL_) {
     // Sheets = primární zdroj, ukládej tam
+    // Posílej předpočítané hodnoty aby Apps Script nepoužíval vlastní (starý) kalkulator
+    const c = calc(mDate, startISO, endISO);
     toast('Ukládám…');
-    const res = await api({action:'addShift',date:mDate,notes:n,start:startISO,end:endISO});
+    const res = await api({
+      action:'addShift', date:mDate, notes:n, start:startISO, end:endISO,
+      grossISK:c.gross, netISK:c.net, hours:c.hrs, type:c.type
+    });
     if (res?.success) {
       closeModal();
       toast('Uloženo ✓');
