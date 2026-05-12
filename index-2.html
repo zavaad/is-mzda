@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>IS Mzda</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface2: #1a1a26;
+  --border: #2a2a3d;
+  --accent: #4af4a0;
+  --accent2: #4a9ff4;
+  --warn: #f4a04a;
+  --danger: #f44a4a;
+  --text: #e8e8f0;
+  --muted: #6666880;
+  --muted2: #555570;
+  --font: 'Syne', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ── NAV ── */
+.nav {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.nav-btn {
+  flex: 1;
+  padding: 14px 8px;
+  background: none;
+  border: none;
+  color: var(--muted2);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .2s;
+  border-bottom: 2px solid transparent;
+}
+.nav-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── PAGES ── */
+.page { display: none; padding: 20px 16px 100px; max-width: 480px; margin: 0 auto; }
+.page.active { display: block; }
+
+/* ── DASHBOARD ── */
+.kennitala-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+}
+.kennitala-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted2); }
+.kennitala-val { font-family: var(--mono); font-size: 15px; color: var(--accent2); font-weight: 600; letter-spacing: .05em; }
+
+.big-earning {
+  background: linear-gradient(135deg, var(--surface) 0%, #1a1a30 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 20px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.big-earning::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 120px; height: 120px;
+  background: radial-gradient(circle, rgba(74,244,160,.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.earn-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted2); margin-bottom: 6px; }
+.earn-czk { font-size: 42px; font-weight: 800; color: var(--accent); line-height: 1; }
+.earn-czk span { font-size: 20px; font-weight: 400; color: var(--muted2); }
+.earn-meta { display: flex; gap: 16px; margin-top: 14px; }
+.earn-meta-item { flex: 1; }
+.earn-meta-label { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted2); margin-bottom: 2px; }
+.earn-meta-val { font-family: var(--mono); font-size: 13px; color: var(--text); }
+
+.rate-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.rate-label { color: var(--muted2); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.rate-val { font-family: var(--mono); color: var(--accent2); font-size: 13px; }
+
+/* Clock in/out button */
+.clock-btn {
+  width: 100%;
+  padding: 18px;
+  border-radius: 14px;
+  border: none;
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  cursor: pointer;
+  transition: transform .1s, opacity .2s;
+  margin-bottom: 20px;
+  text-transform: uppercase;
+}
+.clock-btn:active { transform: scale(.97); }
+.clock-btn.in  { background: var(--accent);  color: #000; }
+.clock-btn.out { background: var(--danger);  color: #fff; }
+.clock-btn.disabled { background: var(--surface2); color: var(--muted2); cursor: not-allowed; }
+.clock-timer {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--warn);
+  margin: -12px 0 16px;
+  letter-spacing: .05em;
+}
+
+/* Stats grid */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+.stat-card-label { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted2); margin-bottom: 4px; }
+.stat-card-val { font-family: var(--mono); font-size: 18px; color: var(--text); font-weight: 600; }
+.stat-card-sub { font-size: 10px; color: var(--muted2); margin-top: 2px; }
+
+/* ── CALENDAR ── */
+.month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.month-title { font-size: 18px; font-weight: 800; }
+.month-nav-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-header { text-align: center; font-size: 10px; letter-spacing: .08em; color: var(--muted2); padding: 6px 0; font-weight: 700; }
+.cal-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  position: relative;
+  background: var(--surface);
+  border: 1px solid transparent;
+  transition: border-color .15s;
+  gap: 2px;
+}
+.cal-day:hover { border-color: var(--border); }
+.cal-day.empty { background: transparent; cursor: default; }
+.cal-day.today { border-color: var(--accent2); color: var(--accent2); }
+.cal-day.has-shift { background: rgba(74,244,160,.12); border-color: rgba(74,244,160,.3); }
+.cal-day.has-shift .cal-dot { display: block; }
+.cal-dot { display: none; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.cal-day.weekend { color: var(--warn); }
+.cal-day.holiday { background: rgba(244,74,74,.1); border-color: rgba(244,74,74,.3); color: var(--danger); }
+
+/* Shift list */
+.shift-list { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+.shift-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.shift-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.shift-dot.pracovní\ den { background: var(--accent2); }
+.shift-dot.víkend { background: var(--warn); }
+.shift-dot.svátek { background: var(--danger); }
+.shift-info { flex: 1; }
+.shift-date { font-size: 11px; color: var(--muted2); }
+.shift-time { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.shift-pay { text-align: right; }
+.shift-gross { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+.shift-net { font-size: 10px; color: var(--muted2); }
+.shift-del {
+  background: none; border: none; color: var(--muted2); font-size: 18px; cursor: pointer; padding: 4px;
+  transition: color .15s;
+}
+.shift-del:hover { color: var(--danger); }
+
+/* ── ADD SHIFT ── */
+.section-title { font-size: 14px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted2); margin-bottom: 12px; margin-top: 24px; }
+.section-title:first-child { margin-top: 0; }
+.form-group { margin-bottom: 14px; }
+.form-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted2); margin-bottom: 6px; display: block; }
+.form-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 14px;
+  outline: none;
+  transition: border-color .2s;
+}
+.form-input:focus { border-color: var(--accent2); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn-primary {
+  width: 100%;
+  padding: 16px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 12px;
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: .04em;
+  transition: opacity .2s;
+  margin-top: 8px;
+}
+.btn-primary:active { opacity: .8; }
+
+/* Preview card */
+.preview-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+  display: none;
+}
+.preview-card.visible { display: block; }
+.preview-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+.preview-row .label { color: var(--muted2); }
+.preview-row .val { font-family: var(--mono); font-weight: 600; }
+.preview-row .val.green { color: var(--accent); }
+.preview-row .val.blue { color: var(--accent2); }
+
+/* ── SETTINGS ── */
+.settings-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 10px 20px;
+  border-radius: 30px;
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity .3s, transform .3s;
+  z-index: 200;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── LOADING ── */
+.loading { text-align: center; padding: 40px; color: var(--muted2); font-size: 13px; letter-spacing: .06em; }
+
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.pill.víkend { background: rgba(244,160,74,.15); color: var(--warn); }
+.pill.pracovní\ den { background: rgba(74,159,244,.15); color: var(--accent2); }
+.pill.svátek { background: rgba(244,74,74,.15); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <button class="nav-btn active" data-page="dashboard">📊 Přehled</button>
+  <button class="nav-btn" data-page="calendar">📅 Směny</button>
+  <button class="nav-btn" data-page="add">➕ Přidat</button>
+  <button class="nav-btn" data-page="settings">⚙️ Nastavení</button>
+</nav>
+
+<!-- DASHBOARD -->
+<div class="page active" id="page-dashboard">
+  <div class="kennitala-bar">
+    <span class="kennitala-label">Kennitala</span>
+    <span class="kennitala-val" id="kennitala-display">—</span>
+  </div>
+
+  <div id="clock-section">
+    <button class="clock-btn in" id="clock-btn" onclick="toggleClock()">● Clock In</button>
+    <div class="clock-timer" id="clock-timer" style="display:none"></div>
+  </div>
+
+  <div class="big-earning">
+    <div class="earn-label">Tento měsíc – čistá mzda</div>
+    <div class="earn-czk"><span id="earn-czk">—</span> <span>Kč</span></div>
+    <div class="earn-meta">
+      <div class="earn-meta-item">
+        <div class="earn-meta-label">Hrubě ISK</div>
+        <div class="earn-meta-val" id="earn-gross-isk">—</div>
+      </div>
+      <div class="earn-meta-item">
+        <div class="earn-meta-label">Čistě ISK</div>
+        <div class="earn-meta-val" id="earn-net-isk">—</div>
+      </div>
+      <div class="earn-meta-item">
+        <div class="earn-meta-label">Hodin</div>
+        <div class="earn-meta-val" id="earn-hours">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rate-bar">
+    <span class="rate-label">Kurz ISK/CZK</span>
+    <span class="rate-val" id="rate-display">načítám…</span>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-card-label">Odpočty celkem</div>
+      <div class="stat-card-val" id="stat-deductions">—</div>
+      <div class="stat-card-sub">daň + důchod + odbory</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-label">Směn tento měsíc</div>
+      <div class="stat-card-val" id="stat-shifts">0</div>
+      <div class="stat-card-sub">celkem odpracováno</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-label">Čistě Kč/hod</div>
+      <div class="stat-card-val" id="stat-hourly-czk">—</div>
+      <div class="stat-card-sub">průměr po odvodech</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-label">Důchod (15,5%)</div>
+      <div class="stat-card-val" id="stat-pension">—</div>
+      <div class="stat-card-sub">ISK do fondu</div>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR -->
+<div class="page" id="page-calendar">
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
+    <span class="month-title" id="month-title"></span>
+    <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
+  </div>
+  <div class="cal-grid" id="cal-grid"></div>
+  <div class="shift-list" id="shift-list"><div class="loading">Načítám směny…</div></div>
+</div>
+
+<!-- ADD SHIFT -->
+<div class="page" id="page-add">
+  <div class="section-title">Přidat směnu zpětně</div>
+  <div class="form-group">
+    <label class="form-label">Datum</label>
+    <input type="date" class="form-input" id="add-date" oninput="previewShift()">
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">Začátek</label>
+      <input type="time" class="form-input" id="add-start" value="11:00" oninput="previewShift()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Konec</label>
+      <input type="time" class="form-input" id="add-end" value="23:00" oninput="previewShift()">
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Poznámka (volitelně)</label>
+    <input type="text" class="form-input" id="add-notes" placeholder="např. Höfn kuchyň">
+  </div>
+
+  <div class="preview-card" id="preview-card">
+    <div class="preview-row"><span class="label">Typ směny</span><span class="val" id="prev-type"></span></div>
+    <div class="preview-row"><span class="label">Hodin</span><span class="val" id="prev-hours"></span></div>
+    <div class="preview-row"><span class="label">Hrubě ISK</span><span class="val green" id="prev-gross"></span></div>
+    <div class="preview-row"><span class="label">Čistě ISK</span><span class="val green" id="prev-net"></span></div>
+    <div class="preview-row"><span class="label">Čistě Kč</span><span class="val blue" id="prev-czk"></span></div>
+  </div>
+
+  <button class="btn-primary" onclick="saveShift()">Uložit směnu</button>
+
+  <div class="section-title" style="margin-top:32px">Rozpis příplatků</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;font-size:12px;line-height:1.9;color:var(--muted2)">
+    <b style="color:var(--text)">Pracovní den</b><br>
+    0–8h → základní sazba (mzda / 171,15h)<br>
+    8h+ → přesčas: <span style="color:var(--accent)">0,875%</span> mzdy/hod<br>
+    18:00–24:00 → večerní příplatek <span style="color:var(--accent)">+15%</span><br><br>
+    <b style="color:var(--text)">Víkend (So/Ne)</b><br>
+    Celá směna → <span style="color:var(--warn)">1,375%</span> měs. mzdy/hod<br><br>
+    <b style="color:var(--text)">Svátek</b><br>
+    Celá směna → <span style="color:var(--danger)">1,375%</span> měs. mzdy/hod<br>
+    Min. 4h i za kratší výjezd
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="page" id="page-settings">
+  <div class="settings-section">
+    <div class="section-title" style="margin-top:0">Osobní údaje</div>
+    <div class="form-group">
+      <label class="form-label">Kennitala</label>
+      <input type="text" class="form-input" id="s-kennitala" placeholder="000000-0000">
+    </div>
+  </div>
+  <div class="settings-section">
+    <div class="section-title" style="margin-top:0">Mzdové parametry</div>
+    <div class="form-group">
+      <label class="form-label">Měsíční hrubá mzda (ISK)</label>
+      <input type="number" class="form-input" id="s-salary" value="513000">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Daň (%)</label>
+      <input type="number" class="form-input" id="s-tax" value="36">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Důchod zaměst. (%)</label>
+        <input type="number" class="form-input" id="s-pension" value="4">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Odbory (%)</label>
+        <input type="number" class="form-input" id="s-union" value="0.85">
+      </div>
+    </div>
+  </div>
+  <div class="settings-section">
+    <div class="section-title" style="margin-top:0">Google Sheets</div>
+    <div class="form-group">
+      <label class="form-label">Apps Script URL</label>
+      <input type="url" class="form-input" id="s-url" placeholder="https://script.google.com/macros/s/…/exec">
+    </div>
+  </div>
+  <button class="btn-primary" onclick="saveSettings()">Uložit nastavení</button>
+
+  <div style="margin-top:24px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:11px;color:var(--muted2);line-height:1.7">
+    <b style="color:var(--text)">Odvody ze mzdy</b><br>
+    Daň: <span id="info-tax">36%</span> &nbsp;|&nbsp; Důchod: <span id="info-pension">4%</span><br>
+    Odbory: <span id="info-union">0.85%</span> &nbsp;|&nbsp; Zaměst. důchod: 11.5%<br><br>
+    <b style="color:var(--text)">Důchod</b><br>
+    Celkem do fondu: 15.5% hrubé mzdy<br>
+    Jako EEA občan peníze zůstanou v IS systému<br>
+    Vyplácí se měsíčně od 60–67 let doživotně
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════
+// CONFIG & STATE
+// ══════════════════════════════════════════════
+let SCRIPT_URL = localStorage.getItem('scriptUrl') || '';
+let settings = {
+  monthlySalary: 513000,
+  taxRate: 36,
+  pensionEmployee: 4,
+  unionFee: 0.85,
+  kennitala: '',
+  hoursPerMonth: 171.15
+};
+let iskCzkRate = 0.17; // fallback: 10 ISK = 1.7 CZK
+let currentMonth = new Date().toISOString().slice(0,7);
+let allShifts = [];
+let clockStart = null;
+let clockInterval = null;
+
+// Iceland public holidays (MM-DD)
+const HOLIDAYS = ['01-01','01-06','04-17','04-18','04-20','04-21',
+  '05-01','05-29','06-08','06-09','06-17','08-04',
+  '10-26','12-24','12-25','12-26','12-31'];
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+async function init() {
+  loadLocalSettings();
+  renderNav();
+  fetchRate();
+  setInterval(fetchRate, 300000);
+
+  if (SCRIPT_URL) {
+    await loadSettingsFromSheet();
+    await loadShifts();
+  }
+
+  checkActiveClock();
+  renderDashboard();
+  renderCalendar();
+  setDefaultDate();
+}
+
+function loadLocalSettings() {
+  const saved = localStorage.getItem('settings');
+  if (saved) Object.assign(settings, JSON.parse(saved));
+  SCRIPT_URL = localStorage.getItem('scriptUrl') || '';
+  document.getElementById('s-url').value = SCRIPT_URL;
+  document.getElementById('s-salary').value = settings.monthlySalary;
+  document.getElementById('s-tax').value = settings.taxRate;
+  document.getElementById('s-pension').value = settings.pensionEmployee;
+  document.getElementById('s-union').value = settings.unionFee;
+  document.getElementById('s-kennitala').value = settings.kennitala || '';
+  updateInfoLabels();
+}
+
+function updateInfoLabels() {
+  document.getElementById('info-tax').textContent = settings.taxRate + '%';
+  document.getElementById('info-pension').textContent = settings.pensionEmployee + '%';
+  document.getElementById('info-union').textContent = settings.unionFee + '%';
+}
+
+// ══════════════════════════════════════════════
+// EXCHANGE RATE
+// ══════════════════════════════════════════════
+async function fetchRate() {
+  try {
+    const r = await fetch('https://api.exchangerate-api.com/v4/latest/ISK');
+    const d = await r.json();
+    if (d.rates && d.rates.CZK) {
+      iskCzkRate = d.rates.CZK;
+      document.getElementById('rate-display').textContent =
+        `10 ISK = ${(iskCzkRate * 10).toFixed(3)} Kč`;
+      renderDashboard();
+    }
+  } catch {
+    document.getElementById('rate-display').textContent =
+      `10 ISK = ${(iskCzkRate * 10).toFixed(3)} Kč (offline)`;
+  }
+}
+
+// ══════════════════════════════════════════════
+// SHEETS API
+// ══════════════════════════════════════════════
+async function api(params) {
+  if (!SCRIPT_URL) return null;
+  const url = SCRIPT_URL + '?' + new URLSearchParams(params);
+  const r = await fetch(url);
+  return r.json();
+}
+
+async function loadSettingsFromSheet() {
+  const res = await api({ action: 'getSettings' });
+  if (res && res.success) {
+    Object.assign(settings, res.settings);
+    settings.monthlySalary = parseFloat(settings.monthlySalary);
+    settings.taxRate = parseFloat(settings.taxRate);
+    settings.pensionEmployee = parseFloat(settings.pensionEmployee);
+    settings.unionFee = parseFloat(settings.unionFee);
+    settings.hoursPerMonth = parseFloat(settings.hoursPerMonth);
+    localStorage.setItem('settings', JSON.stringify(settings));
+  }
+}
+
+async function loadShifts() {
+  const res = await api({ action: 'getShifts', month: currentMonth });
+  if (res && res.success) {
+    allShifts = res.shifts || [];
+    renderDashboard();
+    renderCalendar();
+  }
+}
+
+// ══════════════════════════════════════════════
+// CLOCK IN / OUT
+// ══════════════════════════════════════════════
+async function checkActiveClock() {
+  if (!SCRIPT_URL) return;
+  const res = await api({ action: 'getActive' });
+  if (res && res.active) {
+    clockStart = new Date(res.clockIn);
+    startClockTimer();
+    updateClockBtn(true);
+  }
+}
+
+function toggleClock() {
+  if (!SCRIPT_URL) { showToast('Nejdřív nastav Script URL v nastavení'); return; }
+  if (clockStart) {
+    clockOut();
+  } else {
+    clockIn();
+  }
+}
+
+async function clockIn() {
+  const now = new Date().toISOString();
+  clockStart = new Date(now);
+  startClockTimer();
+  updateClockBtn(true);
+  await api({ action: 'clockIn', time: now });
+  showToast('Clock in ✓ ' + formatTime(clockStart));
+}
+
+async function clockOut() {
+  const now = new Date().toISOString();
+  stopClockTimer();
+  updateClockBtn(false);
+  const res = await api({ action: 'clockOut', time: now });
+  clockStart = null;
+  if (res && res.success) {
+    showToast('Směna uložena ✓');
+    await loadShifts();
+  }
+}
+
+function startClockTimer() {
+  document.getElementById('clock-timer').style.display = 'block';
+  clockInterval = setInterval(updateTimer, 1000);
+  updateTimer();
+}
+function stopClockTimer() {
+  clearInterval(clockInterval);
+  document.getElementById('clock-timer').style.display = 'none';
+}
+function updateTimer() {
+  if (!clockStart) return;
+  const diff = Date.now() - clockStart.getTime();
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  document.getElementById('clock-timer').textContent =
+    `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+function updateClockBtn(active) {
+  const btn = document.getElementById('clock-btn');
+  if (active) {
+    btn.textContent = '■ Clock Out';
+    btn.className = 'clock-btn out';
+  } else {
+    btn.textContent = '● Clock In';
+    btn.className = 'clock-btn in';
+  }
+}
+
+// ══════════════════════════════════════════════
+// PAY CALCULATION (client-side preview)
+// ══════════════════════════════════════════════
+function calcShiftPay(dateStr, startISO, endISO) {
+  const salary = parseFloat(settings.monthlySalary) || 513000;
+  const hpm = parseFloat(settings.hoursPerMonth) || 171.15;
+  const hourlyBase = salary / hpm;
+
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  const totalHours = (end - start) / 3600000;
+
+  const dow = start.getDay();
+  const isWeekend = (dow === 0 || dow === 6);
+  const mmdd = dateStr.slice(5);
+  const isHoliday = HOLIDAYS.includes(mmdd);
+
+  let grossISK = 0;
+
+  if (isHoliday || isWeekend) {
+    grossISK = salary * 0.01375 * totalHours;
+  } else {
+    const normalH = Math.min(totalHours, 8);
+    const otH = Math.max(0, totalHours - 8);
+    grossISK = (normalH * hourlyBase) + (otH * salary * 0.00875);
+
+    // Evening supplement 18-24h (+15%)
+    const eveStart = new Date(start); eveStart.setHours(18,0,0,0);
+    const eveEnd = new Date(start); eveEnd.setHours(24,0,0,0);
+    const ovS = Math.max(start.getTime(), eveStart.getTime());
+    const ovE = Math.min(end.getTime(), eveEnd.getTime());
+    const eveH = Math.max(0, (ovE - ovS) / 3600000);
+    grossISK += eveH * hourlyBase * 0.15;
+  }
+
+  const deductRate = (parseFloat(settings.taxRate)/100) +
+    (parseFloat(settings.pensionEmployee)/100) +
+    (parseFloat(settings.unionFee)/100);
+  const netISK = grossISK * (1 - deductRate);
+  const type = isHoliday ? 'svátek' : isWeekend ? 'víkend' : 'pracovní den';
+
+  return {
+    hours: Math.round(totalHours * 100) / 100,
+    grossISK: Math.round(grossISK),
+    netISK: Math.round(netISK),
+    type
+  };
+}
+
+// ══════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════
+function renderDashboard() {
+  // Kennitala
+  document.getElementById('kennitala-display').textContent = settings.kennitala || '—';
+
+  // Aggregate this month
+  let totalGross = 0, totalNet = 0, totalHours = 0;
+  allShifts.forEach(s => {
+    totalGross += parseFloat(s.grossISK) || 0;
+    totalNet += parseFloat(s.netISK) || 0;
+    totalHours += parseFloat(s.hours) || 0;
+  });
+
+  const netCzk = Math.round(totalNet * iskCzkRate);
+  document.getElementById('earn-czk').textContent = fmtNum(netCzk);
+  document.getElementById('earn-gross-isk').textContent = fmtNum(Math.round(totalGross));
+  document.getElementById('earn-net-isk').textContent = fmtNum(Math.round(totalNet));
+  document.getElementById('earn-hours').textContent = totalHours.toFixed(1) + 'h';
+
+  const deductions = totalGross - totalNet;
+  document.getElementById('stat-deductions').textContent = fmtNum(Math.round(deductions)) + ' ISK';
+  document.getElementById('stat-shifts').textContent = allShifts.length;
+  const hCzk = totalHours > 0 ? Math.round((totalNet * iskCzkRate) / totalHours) : 0;
+  document.getElementById('stat-hourly-czk').textContent = fmtNum(hCzk) + ' Kč';
+
+  const pensionTotal = Math.round(totalGross * 0.155);
+  document.getElementById('stat-pension').textContent = fmtNum(pensionTotal) + ' ISK';
+}
+
+// ══════════════════════════════════════════════
+// CALENDAR
+// ══════════════════════════════════════════════
+function renderCalendar() {
+  const [year, month] = currentMonth.split('-').map(Number);
+  const months = ['Leden','Únor','Březen','Duben','Květen','Červen',
+    'Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+  document.getElementById('month-title').textContent = `${months[month-1]} ${year}`;
+
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+  ['Po','Út','St','Čt','Pá','So','Ne'].forEach(d => {
+    const h = document.createElement('div');
+    h.className = 'cal-header'; h.textContent = d;
+    grid.appendChild(h);
+  });
+
+  const firstDay = new Date(year, month-1, 1);
+  let startDow = firstDay.getDay(); // 0=Sun
+  startDow = startDow === 0 ? 6 : startDow - 1; // Mon=0
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const today = new Date().toISOString().slice(0,10);
+
+  // Build shift map
+  const shiftMap = {};
+  allShifts.forEach(s => { shiftMap[s.date] = (shiftMap[s.date] || 0) + 1; });
+
+  for (let i = 0; i < startDow; i++) {
+    const e = document.createElement('div'); e.className = 'cal-day empty';
+    grid.appendChild(e);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${pad(month)}-${pad(d)}`;
+    const dow = new Date(year, month-1, d).getDay();
+    const isWe = dow === 0 || dow === 6;
+    const mmdd = `${pad(month)}-${pad(d)}`;
+    const isHol = HOLIDAYS.includes(mmdd);
+
+    const el = document.createElement('div');
+    el.className = 'cal-day';
+    if (isHol) el.classList.add('holiday');
+    else if (isWe) el.classList.add('weekend');
+    if (dateStr === today) el.classList.add('today');
+    if (shiftMap[dateStr]) el.classList.add('has-shift');
+
+    el.innerHTML = `${d}<div class="cal-dot"></div>`;
+    el.onclick = () => jumpToDate(dateStr);
+    grid.appendChild(el);
+  }
+
+  renderShiftList();
+}
+
+function renderShiftList() {
+  const list = document.getElementById('shift-list');
+  if (!allShifts.length) {
+    list.innerHTML = '<div class="loading">Žádné směny tento měsíc</div>';
+    return;
+  }
+  const sorted = [...allShifts].sort((a,b) => b.date.localeCompare(a.date));
+  list.innerHTML = sorted.map(s => {
+    const startT = formatTimeFromISO(s.start);
+    const endT = formatTimeFromISO(s.end);
+    const grossCzk = Math.round(s.netISK * iskCzkRate);
+    return `
+    <div class="shift-item">
+      <div class="shift-dot ${s.type}"></div>
+      <div class="shift-info">
+        <div class="shift-date">${s.date} &nbsp;<span class="pill ${s.type}">${s.type}</span></div>
+        <div class="shift-time">${startT}–${endT} &nbsp; ${parseFloat(s.hours).toFixed(1)}h</div>
+      </div>
+      <div class="shift-pay">
+        <div class="shift-gross">${fmtNum(s.grossISK)} ISK</div>
+        <div class="shift-net">čistě ~${fmtNum(grossCzk)} Kč</div>
+      </div>
+      <button class="shift-del" onclick="deleteShift('${s.id}')">×</button>
+    </div>`;
+  }).join('');
+}
+
+function changeMonth(dir) {
+  const [y, m] = currentMonth.split('-').map(Number);
+  const d = new Date(y, m - 1 + dir, 1);
+  currentMonth = d.toISOString().slice(0,7);
+  loadShifts().then(() => renderCalendar());
+}
+
+function jumpToDate(dateStr) {
+  document.getElementById('add-date').value = dateStr;
+  showPage('add');
+  previewShift();
+}
+
+// ══════════════════════════════════════════════
+// ADD SHIFT
+// ══════════════════════════════════════════════
+function setDefaultDate() {
+  document.getElementById('add-date').value = new Date().toISOString().slice(0,10);
+}
+
+function previewShift() {
+  const date = document.getElementById('add-date').value;
+  const start = document.getElementById('add-start').value;
+  const end = document.getElementById('add-end').value;
+  if (!date || !start || !end) return;
+
+  const startISO = `${date}T${start}:00`;
+  let endDate = date;
+  if (end <= start) {
+    const next = new Date(date); next.setDate(next.getDate()+1);
+    endDate = next.toISOString().slice(0,10);
+  }
+  const endISO = `${endDate}T${end}:00`;
+
+  const calc = calcShiftPay(date, startISO, endISO);
+  const czk = Math.round(calc.netISK * iskCzkRate);
+
+  document.getElementById('prev-type').innerHTML = `<span class="pill ${calc.type}">${calc.type}</span>`;
+  document.getElementById('prev-hours').textContent = calc.hours + ' h';
+  document.getElementById('prev-gross').textContent = fmtNum(calc.grossISK) + ' ISK';
+  document.getElementById('prev-net').textContent = fmtNum(calc.netISK) + ' ISK';
+  document.getElementById('prev-czk').textContent = fmtNum(czk) + ' Kč';
+  document.getElementById('preview-card').classList.add('visible');
+}
+
+async function saveShift() {
+  if (!SCRIPT_URL) { showToast('Nastav Script URL v nastavení'); return; }
+  const date = document.getElementById('add-date').value;
+  const start = document.getElementById('add-start').value;
+  const end = document.getElementById('add-end').value;
+  const notes = document.getElementById('add-notes').value;
+  if (!date || !start || !end) { showToast('Vyplň datum a časy'); return; }
+
+  let endDate = date;
+  if (end <= start) {
+    const next = new Date(date); next.setDate(next.getDate()+1);
+    endDate = next.toISOString().slice(0,10);
+  }
+
+  const res = await api({
+    action: 'addShift',
+    date, notes,
+    start: `${date}T${start}:00`,
+    end: `${endDate}T${end}:00`
+  });
+
+  if (res && res.success) {
+    showToast('Směna uložena ✓');
+    await loadShifts();
+    showPage('calendar');
+  } else {
+    showToast('Chyba: ' + (res?.error || 'neznámá'));
+  }
+}
+
+async function deleteShift(id) {
+  if (!confirm('Smazat tuto směnu?')) return;
+  const res = await api({ action: 'deleteShift', id });
+  if (res && res.success) { showToast('Smazáno'); await loadShifts(); }
+}
+
+// ══════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════
+async function saveSettings() {
+  settings.kennitala = document.getElementById('s-kennitala').value;
+  settings.monthlySalary = parseFloat(document.getElementById('s-salary').value);
+  settings.taxRate = parseFloat(document.getElementById('s-tax').value);
+  settings.pensionEmployee = parseFloat(document.getElementById('s-pension').value);
+  settings.unionFee = parseFloat(document.getElementById('s-union').value);
+
+  SCRIPT_URL = document.getElementById('s-url').value.trim();
+  localStorage.setItem('scriptUrl', SCRIPT_URL);
+  localStorage.setItem('settings', JSON.stringify(settings));
+  updateInfoLabels();
+
+  if (SCRIPT_URL) {
+    await api({ action: 'saveSettings', ...settings });
+    showToast('Uloženo do Sheets ✓');
+    await loadShifts();
+  } else {
+    showToast('Uloženo lokálně ✓');
+  }
+  renderDashboard();
+  document.getElementById('kennitala-display').textContent = settings.kennitala || '—';
+}
+
+// ══════════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════════
+function renderNav() {
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => showPage(btn.dataset.page));
+  });
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector(`[data-page="${name}"]`).classList.add('active');
+}
+
+// ══════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════
+function pad(n) { return String(n).padStart(2,'0'); }
+function fmtNum(n) { return Number(n).toLocaleString('cs-CZ'); }
+function formatTime(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function formatTimeFromISO(iso) {
+  if (!iso) return '—';
+  const s = iso.toString();
+  // Handle "2026-05-12T11:00:00" or sheet date objects
+  if (s.includes('T')) return s.slice(11,16);
+  return s.slice(0,5);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ══════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
