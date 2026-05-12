@@ -197,44 +197,25 @@ hr {
   width: 4px; height: 4px; border-radius: 50%; background: var(--green);
 }
 .cd.now.has::after { background: var(--bg); }
-.cd.planned {
-  background: rgba(26,26,26,.06);
-  font-weight: 600;
-}
-.cd.planned::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border-radius: 6px;
-  border: 1.5px solid rgba(26,26,26,.2);
-  pointer-events: none;
-}
-.cd.planned.we {
-  background: rgba(184,102,10,.07);
-}
-.cd.planned.we::before {
-  border-color: rgba(184,102,10,.3);
-}
-.cd.planned.now {
-  background: var(--text);
-}
-.cd.planned.now::before { display: none; }
-
 /* calendar legend */
 .cal-legend {
-  display: flex; gap: 14px; margin-top: 10px; flex-wrap: wrap;
+  display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap;
 }
 .cal-legend-item {
-  display: flex; align-items: center; gap: 5px;
+  display: flex; align-items: center; gap: 6px;
   font-size: 11px; color: var(--muted);
 }
 .leg-dot {
-  width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
 }
-.leg-dot.has    { background: var(--green); border-radius: 50%; }
-.leg-dot.plan   { border: 1.5px solid rgba(26,26,26,.3); background: rgba(26,26,26,.06); }
-.leg-dot.plan-we{ border: 1.5px solid rgba(184,102,10,.4); background: rgba(184,102,10,.07); }
-.leg-dot.hol    { background: var(--red); border-radius: 50%; }
+.leg-dot.has  { background: var(--green); }
+.leg-dot.plan { background: var(--muted2); }
+.leg-dot.hol  { background: var(--red); border-radius: 50%; }
+
+/* planned work day - same dot as .has but grey */
+.cd.has.planned::after {
+  background: var(--muted2) !important;
+}
 
 /* ── SHIFT LIST ── */
 .slist { display: flex; flex-direction: column; }
@@ -477,8 +458,7 @@ hr {
     <div class="cal-legend" id="cal-legend">
       <div class="cal-legend-item"><div class="leg-dot has"></div>odpracováno</div>
       <div class="cal-legend-item"><div class="leg-dot plan"></div>plánováno</div>
-      <div class="cal-legend-item"><div class="leg-dot plan-we"></div>plán víkend</div>
-      <div class="cal-legend-item"><div class="leg-dot hol"></div>svátek IS</div>
+      <div class="cal-legend-item"><div class="leg-dot hol"></div>svátek</div>
     </div>
   </div>
 
@@ -561,7 +541,12 @@ hr {
   </div>
 
   <button class="s-save" onclick="saveSettings()">Uložit a připojit</button>
-  <div class="s-note">
+
+  <div class="s-sec" style="margin-top:28px">Správa dat</div>
+  <button class="s-save" style="background:var(--bg2);color:var(--text);border:1.5px solid var(--muted2);margin-top:0" onclick="recalcAllShifts()">Přepočítat všechny směny</button>
+  <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6">Přepočítá hrubé a čisté ISK u všech uložených směn podle aktuálních sazeb a odvodů.</div>
+
+  <div class="s-note" style="margin-top:20px">
     Jako EEA občan (ČR) zůstávají příspěvky na důchod v islandském systému. Vyplácí se měsíčně doživotně od 60–67 let – musíš si sám požádat u fondu.
   </div>
 </div>
@@ -602,6 +587,7 @@ let clockStart = null;
 let clockIv = null;
 let mDate = null;
 
+const WORK_START = new Date('2026-05-08T00:00:00');
 const HOL = ['01-01','01-06','04-17','04-18','04-20','04-21','05-01','05-29','06-08','06-09','06-17','08-04','10-26','12-24','12-25','12-26','12-31'];
 const MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
 const DAYS = ['Ne','Po','Út','St','Čt','Pá','So'];
@@ -851,7 +837,8 @@ function renderDash() {
 }
 
 function isPlannedWorkDay(dateStr) {
-  const d = new Date(dateStr);
+  const d = new Date(dateStr); d.setHours(0,0,0,0);
+  if (d < WORK_START) return false; // před začátkem práce nezobrazuj
   const monday = getWeekMonday(d);
   const { days: workDays } = getWorkDaysInWeek(monday);
   return workDays.some(wd => wd.toISOString().slice(0,10) === dateStr);
@@ -882,7 +869,7 @@ function renderCal() {
     else if (isWe) cls+=' we';
     if (ds===today) cls+=' now';
     if (isWorked) cls+=' has';
-    else if (isPlanned) cls+=' planned';
+    else if (isPlanned) cls+=' has planned'; // reuse has (dot) styling, add planned for color
 
     div.className=cls;
     div.textContent=d;
@@ -1061,7 +1048,7 @@ async function saveSettings() {
 // Ref týden 11.5.2025 = KRÁTKÝ (St,Čt)
 // Cyklus se střídá: DLOUHÝ / KRÁTKÝ od ref týdne
 
-const SCHEDULE_REF_MONDAY = new Date('2025-05-18'); // pondělí ref DLOUHÉHO týdne
+const SCHEDULE_REF_MONDAY = new Date('2026-05-18'); // pondělí ref DLOUHÉHO týdne
 // Dlouhý: 0=Po,1=Út,4=Pá,5=So,6=Ne (indexy v týdnu Po=0..Ne=6)
 const LONG_DAYS  = [0,1,4,5,6]; // Po,Út,Pá,So,Ne
 const SHORT_DAYS = [2,3];        // St,Čt
@@ -1092,6 +1079,58 @@ function getWorkDaysInWeek(monday) {
   })};
 }
 
+
+// ── RECALC ALL SHIFTS ──
+async function recalcAllShifts() {
+  if (!confirm('Přepočítat všechny směny podle aktuálních sazeb?')) return;
+  toast('Přepočítávám…');
+  let total = 0;
+
+  if (URL_) {
+    // Recalc in Sheets: načti všechny měsíce (posledních 12)
+    const today = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const month = d.toISOString().slice(0,7);
+      const res = await api({ action:'getShifts', month });
+      if (!res?.success || !res.shifts?.length) continue;
+
+      for (const s of res.shifts) {
+        if (!s.start || !s.end) continue;
+        const c = calc(s.date, s.start, s.end);
+        // Delete and re-add with new values
+        await api({ action:'deleteShift', id: s.id });
+        await api({
+          action: 'addShift',
+          date: s.date,
+          notes: s.notes || '',
+          start: s.start,
+          end: s.end
+        });
+        total++;
+      }
+    }
+    await loadShifts();
+  } else {
+    // Recalc locally
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('shifts_'));
+    for (const key of keys) {
+      const month = key.replace('shifts_','');
+      const arr = JSON.parse(localStorage.getItem(key) || '[]');
+      const updated = arr.map(s => {
+        if (!s.start || !s.end) return s;
+        const c = calc(s.date, s.start, s.end);
+        total++;
+        return { ...s, grossISK: c.gross, netISK: c.net, hours: c.hrs, type: c.type };
+      });
+      localStorage.setItem(key, JSON.stringify(updated));
+    }
+    loadLocalShifts();
+    render();
+  }
+
+  toast(`Přepočítáno ${total} směn ✓`);
+}
 
 // ── SHEETS STATUS ──
 function showSheetsStatus(state) {
