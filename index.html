@@ -197,6 +197,44 @@ hr {
   width: 4px; height: 4px; border-radius: 50%; background: var(--green);
 }
 .cd.now.has::after { background: var(--bg); }
+.cd.planned {
+  background: rgba(26,26,26,.06);
+  font-weight: 600;
+}
+.cd.planned::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(26,26,26,.2);
+  pointer-events: none;
+}
+.cd.planned.we {
+  background: rgba(184,102,10,.07);
+}
+.cd.planned.we::before {
+  border-color: rgba(184,102,10,.3);
+}
+.cd.planned.now {
+  background: var(--text);
+}
+.cd.planned.now::before { display: none; }
+
+/* calendar legend */
+.cal-legend {
+  display: flex; gap: 14px; margin-top: 10px; flex-wrap: wrap;
+}
+.cal-legend-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--muted);
+}
+.leg-dot {
+  width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+}
+.leg-dot.has    { background: var(--green); border-radius: 50%; }
+.leg-dot.plan   { border: 1.5px solid rgba(26,26,26,.3); background: rgba(26,26,26,.06); }
+.leg-dot.plan-we{ border: 1.5px solid rgba(184,102,10,.4); background: rgba(184,102,10,.07); }
+.leg-dot.hol    { background: var(--red); border-radius: 50%; }
 
 /* ── SHIFT LIST ── */
 .slist { display: flex; flex-direction: column; }
@@ -436,6 +474,12 @@ hr {
       <span class="we">So</span><span class="we">Ne</span>
     </div>
     <div class="cal-grid" id="cal"></div>
+    <div class="cal-legend" id="cal-legend">
+      <div class="cal-legend-item"><div class="leg-dot has"></div>odpracováno</div>
+      <div class="cal-legend-item"><div class="leg-dot plan"></div>plánováno</div>
+      <div class="cal-legend-item"><div class="leg-dot plan-we"></div>plán víkend</div>
+      <div class="cal-legend-item"><div class="leg-dot hol"></div>svátek IS</div>
+    </div>
   </div>
 
   <!-- SHIFT LIST -->
@@ -493,25 +537,30 @@ hr {
 
   <div class="s-sec">Mzda</div>
   <div class="sg">
-    <label class="sl">Hrubá mzda (ISK / měsíc)</label>
-    <input type="number" class="si" id="s-sal" value="513000">
+    <label class="sl">Základní hodinová sazba (ISK)</label>
+    <input type="number" class="si" id="s-hourly" value="2360" step="10">
+    <div style="font-size:11px;color:var(--muted);margin-top:5px">Průměr pro kuchyň: 2 293–2 428 ISK/hod</div>
   </div>
   <div class="s2">
     <div class="sg"><label class="sl">Daň (%)</label><input type="number" class="si" id="s-tax" value="36"></div>
     <div class="sg"><label class="sl">Důchod (%)</label><input type="number" class="si" id="s-pen" value="4"></div>
   </div>
-  <div class="s2">
-    <div class="sg"><label class="sl">Odbory (%)</label><input type="number" class="si" id="s-uni" value="0.85"></div>
-    <div class="sg"><label class="sl">Hod. / měsíc</label><input type="number" class="si" id="s-hpm" value="171.15"></div>
+  <div class="sg">
+    <label class="sl">Odbory (%)</label><input type="number" class="si" id="s-uni" value="0.85">
   </div>
 
   <div class="s-sec">Google Sheets</div>
+  <div id="sheets-status" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:9px;font-size:12px;font-weight:600;"></div>
   <div class="sg">
     <label class="sl">Apps Script URL</label>
     <input type="url" class="si" id="s-url" placeholder="https://script.google.com/…">
+    <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5">
+      Stejná URL = stejná data na všech zařízeních.<br>
+      Po každé změně kódu v Apps Script udělej <b>nový deployment</b>.
+    </div>
   </div>
 
-  <button class="s-save" onclick="saveSettings()">Uložit</button>
+  <button class="s-save" onclick="saveSettings()">Uložit a připojit</button>
   <div class="s-note">
     Jako EEA občan (ČR) zůstávají příspěvky na důchod v islandském systému. Vyplácí se měsíčně doživotně od 60–67 let – musíš si sám požádat u fondu.
   </div>
@@ -545,7 +594,7 @@ hr {
 <script>
 // ── STATE ──
 let URL_ = localStorage.getItem('su') || '';
-let cfg = { monthlySalary:513000, taxRate:36, pensionEmployee:4, unionFee:.85, kennitala:'', hoursPerMonth:171.15 };
+let cfg = { hourlyRate:2360, taxRate:36, pensionEmployee:4, unionFee:.85, kennitala:'' };
 let rate = 0.17;
 let curMonth = new Date().toISOString().slice(0,7);
 let shifts = [];
@@ -577,11 +626,10 @@ function loadLocal() {
 
 function setForm() {
   el('s-url').value = URL_;
-  el('s-sal').value = cfg.monthlySalary;
+  el('s-hourly').value = cfg.hourlyRate || 2360;
   el('s-tax').value = cfg.taxRate;
   el('s-pen').value = cfg.pensionEmployee;
   el('s-uni').value = cfg.unionFee;
-  el('s-hpm').value = cfg.hoursPerMonth;
   el('s-kt').value = cfg.kennitala || '';
 }
 
@@ -592,39 +640,53 @@ async function fetchRate() {
     const d = await r.json();
     if (d.rates?.CZK) {
       rate = d.rates.CZK;
-      el('rate-sub').textContent = `1 ISK = ${rate.toFixed(4)} Kč  ·  kurz živý`;
+      el('rate-sub').textContent = `1 ISK = ${rate.toFixed(4)} Kč  ·  live`;
       renderDash();
     }
   } catch {
-    el('rate-sub').textContent = `10 ISK ≈ ${(rate*10).toFixed(3)} Kč (offline)`;
+    el('rate-sub').textContent = `1 ISK = ${rate.toFixed(4)} Kč  ·  offline`;
   }
 }
 
 // ── API ──
 async function api(p) {
   if (!URL_) return null;
-  const r = await fetch(URL_ + '?' + new URLSearchParams(p));
-  return r.json();
+  try {
+    // Apps Script requires redirect following for CORS
+    const r = await fetch(URL_ + '?' + new URLSearchParams(p), {
+      redirect: 'follow',
+      method: 'GET'
+    });
+    const text = await r.text();
+    return JSON.parse(text);
+  } catch(err) {
+    console.error('API error:', err);
+    return null;
+  }
 }
 async function loadCfg() {
   const res = await api({ action:'getSettings' });
   if (res?.success) {
     Object.assign(cfg, res.settings);
-    ['monthlySalary','taxRate','pensionEmployee','unionFee','hoursPerMonth'].forEach(k => cfg[k]=parseFloat(cfg[k]));
+    ['hourlyRate','taxRate','pensionEmployee','unionFee'].forEach(k => { if(cfg[k]) cfg[k]=parseFloat(cfg[k]); });
     localStorage.setItem('cfg', JSON.stringify(cfg));
     setForm();
   }
 }
 async function loadShifts() {
-  // Load local first for instant UI
-  loadLocalShifts();
-  render();
-  // Sync from Sheets if configured
-  if (!URL_) return;
-  const res = await api({ action:'getShifts', month:curMonth });
-  if (res?.success) {
-    shifts = res.shifts||[];
-    localStorage.setItem(getLocalKey(), JSON.stringify(shifts));
+  if (URL_) {
+    // Show cached instantly, then refresh from Sheets
+    loadLocalShifts();
+    render();
+    const res = await api({ action:'getShifts', month:curMonth });
+    if (res?.success) {
+      shifts = res.shifts||[];
+      localStorage.setItem(getLocalKey(), JSON.stringify(shifts)); // update cache
+      render();
+    }
+  } else {
+    // Offline/no URL – jen local
+    loadLocalShifts();
     render();
   }
 }
@@ -675,25 +737,97 @@ function tickClock() {
 }
 
 // ── CALC ──
+// Sazby dle kolektivní smlouvy VR/FA 2024-2028:
+// Denní (Po-Pá 7:00-19:00): mzda / 153.86
+// After-hours (Po-Pá mimo 7-19): 0.875% měs. mzdy/hod (do 153.86h/měs), pak 1.0385%
+// Noční (0:00-7:00): 0.9375% měs. mzdy/hod
+// Víkend (So/Ne): 1.0385% měs. mzdy/hod (min 4h)
+// Major svátek: 1.375% měs. mzdy/hod
+// MAJOR svátky: Nový rok, Velký pátek, Hod boží velikonoční, Letnice, 17.6., první Po v srpnu, 25.12., po 12:00 24.12 a 31.12
+// PUBLIC (non-major) svátky: Zelený čtvrtek, Pondělí velikonoční, První den léta, 1.5., Nanebevstoupení, Pondělí svatodušní, 2. svátek vánoční
+const MAJOR_HOL = ['01-01','04-18','04-20','06-08','06-17','12-25'];
+// 24.12 po 12:00 a 31.12 po 12:00 řešíme v kódu zvlášť
+
 function calc(dateStr, s0, e0) {
-  const sal = +cfg.monthlySalary||513000, hpm = +cfg.hoursPerMonth||171.15, base = sal/hpm;
-  const s = new Date(s0), e = new Date(e0), hrs = (e-s)/3600000;
-  const dow = s.getDay(), isWe = dow===0||dow===6;
-  const isHol = HOL.includes(dateStr.slice(5));
+  // Sazby odvozené od základní hodinové sazby (denní)
+  // Poměry dle VR kolektivní smlouvy: after-hours = 0.875%/base_rate_% = cca 1.346x denní sazby atd.
+  // Přesnější: použijeme poměry přímo z procentuálních sazeb
+  // base = hourlyRate (denní sazba, divisor 153.86)
+  // sal = hourlyRate * 153.86 (zpětně odvozená měsíční pro výpočet % sazeb)
+  const baseRate       = +cfg.hourlyRate || 2360;
+  const sal            = baseRate * 153.86; // odvozená měsíční pro % výpočty
+  const afterHoursRate = sal * 0.00875;  // 0.875% měs. mzdy = ~1.346x denní
+  const overtimeRate   = sal * 0.010385; // 1.0385% měs. mzdy = ~1.597x denní
+  const nightRate      = sal * 0.009375; // 0.9375% měs. mzdy = ~1.441x denní
+  const majorHolRate   = sal * 0.01375;  // 1.375% měs. mzdy = ~2.115x denní
+
+  const s = new Date(s0), e = new Date(e0);
+  const totalHrs = (e - s) / 3600000;
+  const dow = s.getDay();
+  const isWeekend = (dow === 0 || dow === 6);
+  const mmdd = dateStr.slice(5);
+  const isMajorHol = MAJOR_HOL.includes(mmdd)
+    || (mmdd === '12-24' && s.getHours() >= 12)
+    || (mmdd === '12-31' && s.getHours() >= 12);
+
   let gross = 0;
-  if (isWe||isHol) {
-    gross = sal * 0.01375 * hrs;
+  let typeLabel = 'pracovní den';
+
+  if (isMajorHol) {
+    // Celá směna major holiday rate
+    gross = majorHolRate * totalHrs;
+    typeLabel = 'major svátek';
+  } else if (isWeekend) {
+    // Celá směna přesčasová sazba, min 4h
+    const billableHrs = Math.max(totalHrs, 4);
+    gross = overtimeRate * billableHrs;
+    typeLabel = 'víkend';
   } else {
-    gross = Math.min(hrs,8)*base + Math.max(0,hrs-8)*sal*0.00875;
-    const es=new Date(s); es.setHours(18,0,0,0);
-    const ee=new Date(s); ee.setHours(24,0,0,0);
-    const eveH = Math.max(0,(Math.min(e,ee)-Math.max(s,es))/3600000);
-    gross += eveH*base*0.15;
+    // Pracovní den - rozdělíme po hodinách
+    // Denní: 7:00-19:00 → baseRate
+    // After-hours: 19:00-24:00 a 0:00-7:00 → afterHoursRate (0.875%)
+    // Noční: 0:00-7:00 → nightRate (0.9375%) - noční je vyšší než after-hours, použijeme ji
+    // V praxi iterujeme minutu po minutě nebo počítáme úseky
+    const dayStart = new Date(s); dayStart.setHours(7,0,0,0);
+    const dayEnd   = new Date(s); dayEnd.setHours(19,0,0,0);
+    const nightEnd = new Date(s); nightEnd.setHours(7,0,0,0);
+    const nextDayNightEnd = new Date(s); nextDayNightEnd.setDate(nextDayNightEnd.getDate()+1); nextDayNightEnd.setHours(7,0,0,0);
+
+    // Úsek 1: denní 7-19
+    const d1s = Math.max(s.getTime(), dayStart.getTime());
+    const d1e = Math.min(e.getTime(), dayEnd.getTime());
+    const dayHrs = Math.max(0, (d1e - d1s) / 3600000);
+
+    // Úsek 2: večer 19-24
+    const eveStart = new Date(s); eveStart.setHours(19,0,0,0);
+    const eveEnd   = new Date(s); eveEnd.setHours(24,0,0,0);
+    const e2s = Math.max(s.getTime(), eveStart.getTime());
+    const e2e = Math.min(e.getTime(), eveEnd.getTime());
+    const eveHrs = Math.max(0, (e2e - e2s) / 3600000);
+
+    // Úsek 3: noční 0-7 (přes půlnoc)
+    const n3s = Math.max(s.getTime(), eveEnd.getTime()); // od půlnoci
+    const n3e = Math.min(e.getTime(), nextDayNightEnd.getTime());
+    const nightHrs = Math.max(0, (n3e - n3s) / 3600000);
+
+    // Ranní noční (pokud směna začíná před 7:00)
+    const earlyNightHrs = Math.max(0, Math.min(e.getTime(), dayStart.getTime()) - s.getTime()) / 3600000;
+
+    gross = dayHrs * baseRate
+          + eveHrs * afterHoursRate
+          + nightHrs * nightRate
+          + earlyNightHrs * nightRate;
+    typeLabel = 'pracovní den';
   }
-  const ded = (+cfg.taxRate/100)+(+cfg.pensionEmployee/100)+(+cfg.unionFee/100);
-  const net = gross*(1-ded);
-  return { hrs:Math.round(hrs*100)/100, gross:Math.round(gross), net:Math.round(net),
-    type: isHol?'svátek':isWe?'víkend':'pracovní den' };
+
+  const ded = (+cfg.taxRate/100) + (+cfg.pensionEmployee/100) + (+cfg.unionFee/100);
+  const net = gross * (1 - ded);
+  return {
+    hrs: Math.round(totalHrs * 100) / 100,
+    gross: Math.round(gross),
+    net: Math.round(net),
+    type: typeLabel
+  };
 }
 
 // ── RENDER ──
@@ -716,22 +850,41 @@ function renderDash() {
   el('b-avg').textContent = shifts.length ? N(Math.round(net/shifts.length)) : '—';
 }
 
+function isPlannedWorkDay(dateStr) {
+  const d = new Date(dateStr);
+  const monday = getWeekMonday(d);
+  const { days: workDays } = getWorkDaysInWeek(monday);
+  return workDays.some(wd => wd.toISOString().slice(0,10) === dateStr);
+}
+
 function renderCal() {
   const [year,month] = curMonth.split('-').map(Number);
   el('m-lbl').textContent = `${MONTHS[month-1]} ${year}`;
   const grid = el('cal'); grid.innerHTML = '';
-  const map = {}; shifts.forEach(s => map[s.date]=true);
+  const workedMap = {}; shifts.forEach(s => workedMap[s.date]=true);
+  const today = new Date().toISOString().slice(0,10);
   let start = new Date(year,month-1,1).getDay();
   start = start===0?6:start-1;
   const days = new Date(year,month,0).getDate();
-  const today = new Date().toISOString().slice(0,10);
+
   for (let i=0;i<start;i++) { const d=document.createElement('div'); d.className='cd emp'; grid.appendChild(d); }
   for (let d=1;d<=days;d++) {
     const ds=`${year}-${p2(month)}-${p2(d)}`;
     const dow=new Date(year,month-1,d).getDay();
-    const isWe=dow===0||dow===6, isHol=HOL.includes(`${p2(month)}-${p2(d)}`);
+    const isWe=dow===0||dow===6;
+    const isHol=HOL.includes(`${p2(month)}-${p2(d)}`);
+    const isWorked=workedMap[ds];
+    const isPlanned=!isWorked && isPlannedWorkDay(ds);
+
     const div=document.createElement('div');
-    div.className='cd'+(isHol?' hol':isWe?' we':'')+(ds===today?' now':'')+(map[ds]?' has':'');
+    let cls='cd';
+    if (isHol) cls+=' hol';
+    else if (isWe) cls+=' we';
+    if (ds===today) cls+=' now';
+    if (isWorked) cls+=' has';
+    else if (isPlanned) cls+=' planned';
+
+    div.className=cls;
     div.textContent=d;
     div.onclick=()=>openModal(ds);
     grid.appendChild(div);
@@ -804,35 +957,51 @@ async function saveShift() {
   let ed=mDate;
   if(e<=s){const nx=new Date(mDate);nx.setDate(nx.getDate()+1);ed=nx.toISOString().slice(0,10);}
   const startISO=`${mDate}T${s}:00`, endISO=`${ed}T${e}:00`;
-  const c=calc(mDate,startISO,endISO);
-  const shift={
-    id: Date.now().toString(),
-    date: mDate, start: startISO, end: endISO,
-    hours: c.hrs, type: c.type,
-    grossISK: c.gross, netISK: c.net,
-    notes: n
-  };
-  // Save locally always
-  saveLocalShift(shift);
-  closeModal();
-  toast('Uloženo ✓');
-  // Also send to Sheets if configured
+
   if (URL_) {
-    api({action:'addShift',date:mDate,notes:n,start:startISO,end:endISO})
-      .then(res=>{ if(!res?.success) toast('Sheets: chyba syncu'); });
+    // Sheets = primární zdroj, ukládej tam
+    toast('Ukládám…');
+    const res = await api({action:'addShift',date:mDate,notes:n,start:startISO,end:endISO});
+    if (res?.success) {
+      closeModal();
+      toast('Uloženo ✓');
+      await loadShifts(); // načti z Sheets → aktualizuje i local cache
+    } else {
+      toast('Chyba Sheets: ' + (res?.error||'zkontroluj URL'));
+    }
+  } else {
+    // Bez Sheets → lokální fallback
+    const c=calc(mDate,startISO,endISO);
+    const shift={
+      id: Date.now().toString(),
+      date: mDate, start: startISO, end: endISO,
+      hours: c.hrs, type: c.type,
+      grossISK: c.gross, netISK: c.net, notes: n
+    };
+    saveLocalShift(shift);
+    loadLocalShifts();
+    render();
+    closeModal();
+    toast('Uloženo lokálně (nastav Script URL pro sync)');
   }
-  // Reload from local
-  loadLocalShifts();
-  render();
 }
 
 async function delShift(id) {
   if(!confirm('Smazat směnu?')) return;
-  deleteLocalShift(id);
-  if (URL_) api({action:'deleteShift',id});
-  loadLocalShifts();
-  render();
-  toast('Smazáno');
+  if (URL_) {
+    const res = await api({action:'deleteShift',id});
+    if (res?.success) {
+      await loadShifts();
+      toast('Smazáno');
+    } else {
+      toast('Chyba mazání');
+    }
+  } else {
+    deleteLocalShift(id);
+    loadLocalShifts();
+    render();
+    toast('Smazáno');
+  }
 }
 
 // ── LOCAL STORAGE FOR SHIFTS ──
@@ -856,22 +1025,94 @@ function loadLocalShifts() {
 }
 
 // ── SETTINGS ──
-function openSettings(){el('s-overlay').classList.add('on');el('s-panel').classList.add('on');}
+function openSettings(){el('s-overlay').classList.add('on');el('s-panel').classList.add('on');initSheetsStatus();}
 function closeSettings(){el('s-overlay').classList.remove('on');el('s-panel').classList.remove('on');}
 
 async function saveSettings() {
   cfg.kennitala=el('s-kt').value;
-  cfg.monthlySalary=+el('s-sal').value;
+  cfg.hourlyRate=+el('s-hourly').value;
   cfg.taxRate=+el('s-tax').value;
   cfg.pensionEmployee=+el('s-pen').value;
   cfg.unionFee=+el('s-uni').value;
-  cfg.hoursPerMonth=+el('s-hpm').value;
   URL_=el('s-url').value.trim();
   localStorage.setItem('su',URL_);
   localStorage.setItem('cfg',JSON.stringify(cfg));
-  if(URL_){await api({action:'saveSettings',...cfg});toast('Uloženo ✓');await loadShifts();}
-  else toast('Uloženo lokálně ✓');
+  if (URL_) {
+    showSheetsStatus('connecting');
+    const res = await api({action:'saveSettings',...cfg});
+    if (res?.success) {
+      showSheetsStatus('ok');
+      toast('Připojeno k Sheets ✓');
+      await loadShifts();
+    } else {
+      showSheetsStatus('error');
+      toast('Chyba připojení – zkontroluj URL');
+    }
+  } else {
+    showSheetsStatus('none');
+    toast('Uloženo jen lokálně');
+  }
   closeSettings(); render();
+}
+
+// ── SCHEDULE ──
+// Rozvrh: první den práce = 8.5.2025 (čtvrtek/pátek)
+// Ref týden 18.5.2025 = DLOUHÝ (Po,Út,Pá,So,Ne)
+// Ref týden 11.5.2025 = KRÁTKÝ (St,Čt)
+// Cyklus se střídá: DLOUHÝ / KRÁTKÝ od ref týdne
+
+const SCHEDULE_REF_MONDAY = new Date('2025-05-18'); // pondělí ref DLOUHÉHO týdne
+// Dlouhý: 0=Po,1=Út,4=Pá,5=So,6=Ne (indexy v týdnu Po=0..Ne=6)
+const LONG_DAYS  = [0,1,4,5,6]; // Po,Út,Pá,So,Ne
+const SHORT_DAYS = [2,3];        // St,Čt
+
+function getWeekMonday(date) {
+  const d = new Date(date);
+  const dow = d.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function isLongWeek(monday) {
+  const msPerWeek = 7 * 24 * 3600 * 1000;
+  const diff = Math.round((monday - SCHEDULE_REF_MONDAY) / msPerWeek);
+  // diff=0 → dlouhý, diff=1 → krátký, diff=2 → dlouhý...
+  return diff % 2 === 0;
+}
+
+function getWorkDaysInWeek(monday) {
+  const isLong = isLongWeek(monday);
+  const workDayIndices = isLong ? LONG_DAYS : SHORT_DAYS;
+  return { isLong, days: workDayIndices.map(i => {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + i);
+    return d;
+  })};
+}
+
+
+// ── SHEETS STATUS ──
+function showSheetsStatus(state) {
+  const el_ = document.getElementById('sheets-status');
+  if (!el_) return;
+  const states = {
+    ok:          { bg:'rgba(42,122,79,.1)',  color:'#2a7a4f', text:'✓ Připojeno – data se synchronizují mezi zařízeními' },
+    error:       { bg:'rgba(192,57,43,.1)',  color:'#c0392b', text:'✗ Chyba připojení – zkontroluj URL a deployment' },
+    connecting:  { bg:'rgba(26,26,26,.06)', color:'#999',    text:'Připojuji…' },
+    none:        { bg:'rgba(26,26,26,.06)', color:'#999',    text:'⚠ Bez Sheets – data jsou pouze v tomto prohlížeči' },
+  };
+  const s = states[state] || states.none;
+  el_.style.display = 'block';
+  el_.style.background = s.bg;
+  el_.style.color = s.color;
+  el_.textContent = s.text;
+}
+
+function initSheetsStatus() {
+  if (URL_) showSheetsStatus('ok');
+  else showSheetsStatus('none');
 }
 
 // ── UTILS ──
