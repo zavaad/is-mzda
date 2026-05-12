@@ -560,11 +560,12 @@ const DAYS = ['Ne','Po','Út','St','Čt','Pá','So'];
 // ── INIT ──
 async function init() {
   loadLocal();
+  loadLocalShifts();
   fetchRate();
   setInterval(fetchRate, 300000);
-  if (URL_) { await loadCfg(); await loadShifts(); }
-  checkClock();
   render();
+  checkClock();
+  if (URL_) { await loadCfg(); await loadShifts(); }
 }
 
 function loadLocal() {
@@ -615,8 +616,17 @@ async function loadCfg() {
   }
 }
 async function loadShifts() {
+  // Load local first for instant UI
+  loadLocalShifts();
+  render();
+  // Sync from Sheets if configured
+  if (!URL_) return;
   const res = await api({ action:'getShifts', month:curMonth });
-  if (res?.success) { shifts = res.shifts||[]; render(); }
+  if (res?.success) {
+    shifts = res.shifts||[];
+    localStorage.setItem(getLocalKey(), JSON.stringify(shifts));
+    render();
+  }
 }
 
 // ── CLOCK ──
@@ -755,9 +765,7 @@ function chMonth(dir) {
   const [y,m]=curMonth.split('-').map(Number);
   const d=new Date(y,m-1+dir,1);
   curMonth=d.toISOString().slice(0,7);
-  shifts=[];
-  render();
-  if (URL_) loadShifts();
+  loadShifts();
 }
 
 // ── MODAL ──
@@ -790,20 +798,61 @@ function prevShift() {
 }
 
 async function saveShift() {
-  if (!URL_) { toast('Nastav Script URL'); return; }
   if (!mDate) return;
   const s=el('m-s').value, e=el('m-e').value, n=el('m-n').value;
+  if (!s||!e) { toast('Vyplň časy'); return; }
   let ed=mDate;
   if(e<=s){const nx=new Date(mDate);nx.setDate(nx.getDate()+1);ed=nx.toISOString().slice(0,10);}
-  const res=await api({action:'addShift',date:mDate,notes:n,start:`${mDate}T${s}:00`,end:`${ed}T${e}:00`});
-  if(res?.success){toast('Uloženo ✓');closeModal();await loadShifts();}
-  else toast('Chyba: '+(res?.error||'?'));
+  const startISO=`${mDate}T${s}:00`, endISO=`${ed}T${e}:00`;
+  const c=calc(mDate,startISO,endISO);
+  const shift={
+    id: Date.now().toString(),
+    date: mDate, start: startISO, end: endISO,
+    hours: c.hrs, type: c.type,
+    grossISK: c.gross, netISK: c.net,
+    notes: n
+  };
+  // Save locally always
+  saveLocalShift(shift);
+  closeModal();
+  toast('Uloženo ✓');
+  // Also send to Sheets if configured
+  if (URL_) {
+    api({action:'addShift',date:mDate,notes:n,start:startISO,end:endISO})
+      .then(res=>{ if(!res?.success) toast('Sheets: chyba syncu'); });
+  }
+  // Reload from local
+  loadLocalShifts();
+  render();
 }
 
 async function delShift(id) {
   if(!confirm('Smazat směnu?')) return;
-  const res=await api({action:'deleteShift',id});
-  if(res?.success){toast('Smazáno');await loadShifts();}
+  deleteLocalShift(id);
+  if (URL_) api({action:'deleteShift',id});
+  loadLocalShifts();
+  render();
+  toast('Smazáno');
+}
+
+// ── LOCAL STORAGE FOR SHIFTS ──
+function getLocalKey() { return 'shifts_' + curMonth; }
+
+function saveLocalShift(shift) {
+  const key = 'shifts_' + shift.date.slice(0,7);
+  const all = JSON.parse(localStorage.getItem(key)||'[]');
+  all.push(shift);
+  localStorage.setItem(key, JSON.stringify(all));
+}
+
+function deleteLocalShift(id) {
+  const key = getLocalKey();
+  const all = JSON.parse(localStorage.getItem(key)||'[]');
+  localStorage.setItem(key, JSON.stringify(all.filter(s=>s.id!==id)));
+}
+
+function loadLocalShifts() {
+  shifts = JSON.parse(localStorage.getItem(getLocalKey())||'[]');
 }
 
 // ── SETTINGS ──
