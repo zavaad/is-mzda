@@ -775,12 +775,19 @@ function calc(dateStr, s0, e0) {
   let gross = 0;
   let typeLabel = 'pracovní den';
 
+  const isPublicHol = HOL.includes(mmdd);
+
   if (isMajorHol) {
-    // Celá směna major holiday rate
+    // Major svátek: 1,375 % měs. mzdy/hod
     gross = majorHolRate * totalHrs;
     typeLabel = 'major svátek';
+  } else if (isPublicHol) {
+    // Public svátek (non-major): stejná sazba jako víkend 1,0385 %
+    const billableHrs = Math.max(totalHrs, 4);
+    gross = overtimeRate * billableHrs;
+    typeLabel = 'svátek';
   } else if (isWeekend) {
-    // Celá směna přesčasová sazba, min 4h
+    // Víkend: 1,0385 %, min 4h
     const billableHrs = Math.max(totalHrs, 4);
     gross = overtimeRate * billableHrs;
     typeLabel = 'víkend';
