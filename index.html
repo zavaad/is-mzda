@@ -1098,14 +1098,14 @@ async function recalcAllShifts() {
       for (const s of res.shifts) {
         if (!s.start || !s.end) continue;
         const c = calc(s.date, s.start, s.end);
-        // Delete and re-add with new values
-        await api({ action:'deleteShift', id: s.id });
+        // Send pre-calculated values directly – bypasses Apps Script's old calc
         await api({
-          action: 'addShift',
-          date: s.date,
-          notes: s.notes || '',
-          start: s.start,
-          end: s.end
+          action: 'updateShift',
+          id: s.id,
+          grossISK: c.gross,
+          netISK: c.net,
+          hours: c.hrs,
+          type: c.type
         });
         total++;
       }
