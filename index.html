@@ -187,7 +187,12 @@ width: 8px; height: 8px; border-radius: 50%; background: currentColor;
 font-size: 13px; opacity: .7; font-variant-numeric: tabular-nums;
 font-weight: 500; display: none; letter-spacing: .01em;
 }
-.clock-btn.on .clock-live { display: block; }
+.clock-rate {
+font-size: 11px; opacity: .55; font-variant-numeric: tabular-nums;
+font-weight: 500; display: none; letter-spacing: .03em;
+margin-top: 2px;
+}
+.clock-btn.on .clock-live, .clock-btn.on .clock-rate { display: block; }
 
 /* ── SECTION ── */
 .section { padding: 26px 24px 0; }
@@ -526,6 +531,7 @@ z-index: 999; white-space: nowrap; pointer-events: none;
         <span class="ctimer" id="c-timer" style="display:none"></span>
       </div>
       <div class="clock-live" id="clock-live"></div>
+      <div class="clock-rate" id="clock-rate"></div>
     </button>
   </div>
 
@@ -818,6 +824,33 @@ function stopClock() {
   el('cdot').classList.remove('pulse');
   el('c-timer').style.display = 'none';
 }
+function getCurrentRate(dateStr, now) {
+  // Vrátí aktuální hodinovou sazbu (ISK/hod) a násobek vs základní sazba
+  const baseRate = +cfg.hourlyRate || 2360;
+  const sal = baseRate * 153.86;
+  const d = new Date(now);
+  const dow = d.getDay();
+  const isWeekend = (dow === 0 || dow === 6);
+  const mmdd = dateStr.slice(5);
+  const isMajorHol = MAJOR_HOL.includes(mmdd)
+    || (mmdd === '12-24' && d.getHours() >= 12)
+    || (mmdd === '12-31' && d.getHours() >= 12);
+  const isPublicHol = HOL.includes(mmdd);
+
+  let rateNow;
+  if (isMajorHol)       rateNow = sal * 0.01375;   // 2.12x
+  else if (isPublicHol) rateNow = sal * 0.010385;  // 1.60x
+  else if (isWeekend)   rateNow = sal * 0.010385;  // 1.60x
+  else {
+    const h = d.getHours();
+    if (h >= 0 && h < 7)        rateNow = sal * 0.009375; // 1.44x noční
+    else if (h >= 19 && h < 24) rateNow = sal * 0.00875;  // 1.35x večerní
+    else                        rateNow = baseRate;        // 1.00x denní
+  }
+  const multiplier = rateNow / baseRate;
+  return { rateIsk: Math.round(rateNow), multiplier };
+}
+
 function tickClock() {
   if (!clockStart) return;
   const d = Date.now() - clockStart;
@@ -833,6 +866,11 @@ function tickClock() {
     const czk = Math.round(c.net * rate);
     const eur = Math.round(c.net * rateEur);
     el('clock-live').textContent = `${N(c.net)} ISK  ·  ${N(czk)} Kč  ·  ${eur} €`;
+
+    // Aktuální sazba + násobek
+    const { rateIsk, multiplier } = getCurrentRate(dateStr, endNow);
+    const czkPerHr = Math.round(rateIsk * rate);
+    el('clock-rate').textContent = `${multiplier.toFixed(2)}×  ·  ${N(czkPerHr)} Kč/h`;
   }
 }
 
@@ -966,26 +1004,37 @@ function isPlannedWorkDay(dateStr) {
   return workDays.some(wd => wd.toISOString().slice(0,10) === dateStr);
 }
 
+function normalizeDate(v) {
+  if (!v) return '';
+  if (v instanceof Date) {
+    return v.getFullYear()+'-'+p2(v.getMonth()+1)+'-'+p2(v.getDate());
+  }
+  const s = v.toString();
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  // Try parsing
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime())) {
+    return dt.getFullYear()+'-'+p2(dt.getMonth()+1)+'-'+p2(dt.getDate());
+  }
+  return s.slice(0,10);
+}
+
 function renderCal() {
   const [year,month] = curMonth.split('-').map(Number);
   el('m-lbl').textContent = `${MONTHS[month-1]} ${year}`;
   const grid = el('cal'); grid.innerHTML = '';
-  // Normalize shift dates - they might be Date objects or strings
+  // Normalize shift dates to YYYY-MM-DD
   const workedMap = {};
   shifts.forEach(s => {
-    let d = s.date;
-    if (d instanceof Date) {
-      d = d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
-    } else if (typeof d === 'string') {
-      // Already YYYY-MM-DD or needs parsing
-      if (!/^\d{4}-\d{2}-\d{2}/.test(d)) {
-        const dt = new Date(d);
-        if (!isNaN(dt)) d = dt.getFullYear()+'-'+p2(dt.getMonth()+1)+'-'+p2(dt.getDate());
-      }
-      d = d.toString().slice(0,10);
-    }
-    workedMap[d] = true;
+    const d = normalizeDate(s.date);
+    if (d) workedMap[d] = true;
   });
+  // Show debug info on rate-sub line
+  if (shifts.length > 0) {
+    const dates = shifts.map(s => normalizeDate(s.date)).join(',');
+    console.log('Worked dates:', dates);
+  }
   const today = new Date().toISOString().slice(0,10);
   let start = new Date(year,month-1,1).getDay();
   start = start===0?6:start-1;
