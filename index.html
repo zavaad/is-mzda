@@ -15,7 +15,19 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;600;700&display=swap">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-button, input { font-family: inherit; }
+button, input, select, textarea {
+  font-family: inherit;
+  color: #1a1a1a;
+  color: var(--text);
+}
+button {
+  background: none;
+  border: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+svg { color: inherit; }
+a { color: inherit; text-decoration: none; }
 
 :root {
 –bg: #f5f4f0;
@@ -139,9 +151,14 @@ margin: 26px 24px 0; opacity: .6;
 .clock-wrap { padding: 22px 24px 0; }
 .clock-btn {
 width: 100%; padding: 18px 22px;
+border-radius: 12px;
 border-radius: var(–r);
+border: 1.5px solid #1a1a1a;
 border: 1.5px solid var(–text);
-background: var(–bg); color: var(–text);
+background: #f5f4f0;
+background: var(–bg);
+color: #1a1a1a;
+color: var(–text);
 font-family: var(–font); font-size: 16px; font-weight: 700;
 cursor: pointer;
 display: flex; flex-direction: column;
