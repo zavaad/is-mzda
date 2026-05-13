@@ -10,13 +10,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>IS Mzda</title>
 <link rel="manifest" href="manifest.json">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Spline+Sans:wght@400;500;600;700&display=swap');
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;600;700&display=swap">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-*, button, input { font-family: inherit; color: inherit; }
-button { background: none; border: none; cursor: pointer; }
+button, input { font-family: inherit; }
 
 :root {
 –bg: #f5f4f0;
@@ -44,8 +43,11 @@ button { background: none; border: none; cursor: pointer; }
 }
 
 html, body {
+background: #f5f4f0;
 background: var(–bg);
+color: #1a1a1a;
 color: var(–text);
+font-family: ‘Spline Sans’, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 font-family: var(–font);
 min-height: 100dvh;
 overflow-x: hidden;
