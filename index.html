@@ -340,6 +340,9 @@ background: var(–bg);
 z-index: 201; transform: translateX(100%);
 transition: transform .28s cubic-bezier(.4,0,.2,1);
 overflow-y: auto; padding: 54px 22px 40px;
+border-top-left-radius: 18px;
+border-bottom-left-radius: 18px;
+box-shadow: -4px 0 24px rgba(0,0,0,.08);
 }
 .s-panel.on { transform: translateX(0); }
 .s-close {
@@ -967,7 +970,22 @@ function renderCal() {
   const [year,month] = curMonth.split('-').map(Number);
   el('m-lbl').textContent = `${MONTHS[month-1]} ${year}`;
   const grid = el('cal'); grid.innerHTML = '';
-  const workedMap = {}; shifts.forEach(s => workedMap[s.date]=true);
+  // Normalize shift dates - they might be Date objects or strings
+  const workedMap = {};
+  shifts.forEach(s => {
+    let d = s.date;
+    if (d instanceof Date) {
+      d = d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+    } else if (typeof d === 'string') {
+      // Already YYYY-MM-DD or needs parsing
+      if (!/^\d{4}-\d{2}-\d{2}/.test(d)) {
+        const dt = new Date(d);
+        if (!isNaN(dt)) d = dt.getFullYear()+'-'+p2(dt.getMonth()+1)+'-'+p2(dt.getDate());
+      }
+      d = d.toString().slice(0,10);
+    }
+    workedMap[d] = true;
+  });
   const today = new Date().toISOString().slice(0,10);
   let start = new Date(year,month-1,1).getDay();
   start = start===0?6:start-1;
