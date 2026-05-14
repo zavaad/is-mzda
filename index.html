@@ -251,14 +251,14 @@ font-weight: 700;
 @media (prefers-color-scheme: dark) {
 .cd.now { background: #c8c8c8; color: #1a1a1a; }
 }
-.cd.has::after {
-content: ‘’; position: absolute; bottom: 3px;
+.cal-dot {
+position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
 width: 4px; height: 4px; border-radius: 50%;
-background: #2a7a4f;
+background: #2a7a4f; pointer-events: none;
 }
-.cd.now.has::after { background: #fff; }
+.cd.now .cal-dot { background: #fff; }
 @media (prefers-color-scheme: dark) {
-.cd.now.has::after { background: #1a1a1a; }
+.cd.now .cal-dot { background: #1a1a1a; }
 }
 /* calendar legend */
 .cal-legend {
@@ -1088,6 +1088,7 @@ function renderCal() {
 
     div.className=cls;
     div.textContent=d;
+    if (isWorked) { const dot=document.createElement('span'); dot.className='cal-dot'; div.appendChild(dot); }
     div.onclick=()=>openModal(ds);
     grid.appendChild(div);
   }
