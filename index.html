@@ -243,20 +243,23 @@ position: relative;
 .cd.we { color: #9a9896; color: var(–muted); }
 .cd.hol { color: #c0392b; color: var(–red); }
 .cd.now {
-background: #1a1a1a;
-background: var(–text);
-color: #f5f4f0;
-color: var(–bg);
+background: #505050;
+color: #fff;
 font-weight: 700;
 }
 .cd.now:active { opacity: .8; }
+@media (prefers-color-scheme: dark) {
+.cd.now { background: #c8c8c8; color: #1a1a1a; }
+}
 .cd.has::after {
 content: ‘’; position: absolute; bottom: 3px;
 width: 4px; height: 4px; border-radius: 50%;
 background: #2a7a4f;
-background: var(–green);
 }
-.cd.now.has::after { background: var(–bg); }
+.cd.now.has::after { background: #fff; }
+@media (prefers-color-scheme: dark) {
+.cd.now.has::after { background: #1a1a1a; }
+}
 /* calendar legend */
 .cal-legend {
 display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap;
@@ -1100,11 +1103,12 @@ function renderList() {
   list.innerHTML=sorted.map(s => {
     const st=tISO(s.start), et=tISO(s.end);
     const czk=N(Math.round(+s.netISK*rate));
-    const dn=DAYS[new Date(s.date).getDay()];
+    const dn=DAYS[new Date(s.date+'T12:00:00').getDay()];
     const dc=s.type==='víkend'?'we':s.type==='svátek'?'hol':'wd';
+    const dp=s.date.split('-'); const dateDisp=`${+dp[2]}. ${+dp[1]}.`;
     return `<div class="sitem">
       <div class="sdot ${dc}"></div>
-      <div class="sdate"><div class="sdate-main">${s.date.slice(5)}</div><div class="sdate-sub">${dn}</div></div>
+      <div class="sdate"><div class="sdate-main">${dateDisp}</div><div class="sdate-sub">${dn}</div></div>
       <div class="stime">${st}–${et} · ${(+s.hours).toFixed(1)}h</div>
       <div class="spay"><div class="spay-czk">~${czk} Kč</div><div class="spay-isk">${N(s.netISK)} ISK</div></div>
       <button class="sdel" onclick="delShift('${s.id}')">×</button>
