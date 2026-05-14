@@ -256,9 +256,15 @@ position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
 width: 4px; height: 4px; border-radius: 50%;
 background: #2a7a4f; pointer-events: none;
 }
-.cd.now .cal-dot { background: #fff; }
-@media (prefers-color-scheme: dark) {
-.cd.now .cal-dot { background: #1a1a1a; }
+/* Dnešní den + odpracováno → zelená plocha (jako worked, ale dnes) */
+.cd.now.has {
+background: #2a7a4f;
+color: #fff;
+}
+.cd.now.has .cal-dot { display: none; }
+/* Dnešní den + plánováno → bílý rámeček na šedé */
+.cd.now.planned {
+box-shadow: inset 0 0 0 2px rgba(255,255,255,0.55);
 }
 /* calendar legend */
 .cal-legend {
@@ -756,6 +762,7 @@ async function fetchRate() {
       if (d.rates.EUR) rateEur = d.rates.EUR;
       el('rate-sub').textContent = `1 ISK = ${rate.toFixed(4)} Kč  ·  live`;
       renderDash();
+      renderList();
     }
   } catch {
     el('rate-sub').textContent = `1 ISK = ${rate.toFixed(4)} Kč  ·  offline`;
