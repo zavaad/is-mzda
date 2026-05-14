@@ -272,10 +272,10 @@ width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
 .leg-dot.plan { background: #c8c6c2; background: var(–muted2); }
 .leg-dot.hol  { background: #c0392b; background: var(–red); border-radius: 50%; }
 
-/* planned work day - same dot as .has but grey */
-.cd.has.planned::after {
-background: #c8c6c2 !important;
-background: var(–muted2) !important;
+/* planned work day - outlined square */
+.cd.planned {
+box-shadow: inset 0 0 0 1.5px #c8c6c2;
+border-radius: 6px;
 }
 
 /* ── SHIFT LIST ── */
@@ -469,7 +469,22 @@ opacity: 0; transition: opacity .22s, transform .22s;
 z-index: 999; white-space: nowrap; pointer-events: none;
 }
 .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media screen and (orientation: landscape) {
+.app { display: none; }
+body::before {
+content: 'Otočte zařízení do výšky';
+position: fixed; inset: 0; z-index: 9999;
+display: flex; align-items: center; justify-content: center;
+font-size: 16px; font-weight: 500; color: #9a9896;
+background: #f5f4f0; font-family: inherit;
+}
+}
+@media screen and (orientation: landscape) and (prefers-color-scheme: dark) {
+body::before { background: #1a1a1a; color: #7a7876; }
+}
 </style>
+<meta name="screen-orientation" content="portrait">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -702,6 +717,7 @@ const DAYS = ['Ne','Po','Út','St','Čt','Pá','So'];
 
 // ── INIT ──
 async function init() {
+  if (screen.orientation?.lock) screen.orientation.lock('portrait').catch(() => {});
   loadLocal();
   loadLocalShifts();
   fetchRate();
@@ -803,9 +819,14 @@ async function doClockIn() {
   toast('Clock in ' + p2(clockStart.getHours()) + ':' + p2(clockStart.getMinutes()));
 }
 async function doClockOut() {
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowISO = now.toISOString();
+  const dateStr = clockStart.toISOString().slice(0, 10);
+  const startISO = clockStart.toISOString().slice(0, 16);
+  const endISO = nowISO.slice(0, 16);
+  const c = calc(dateStr, startISO, endISO);
   stopClock();
-  const res = await api({ action:'clockOut', time:now });
+  const res = await api({ action:'clockOut', time:nowISO, grossISK:c.gross, netISK:c.net, hours:c.hrs, type:c.type });
   clockStart = null;
   if (res?.success) { toast('Směna uložena ✓'); await loadShifts(); }
 }
@@ -997,11 +1018,15 @@ function renderDash() {
 }
 
 function isPlannedWorkDay(dateStr) {
-  const d = new Date(dateStr); d.setHours(0,0,0,0);
-  if (d < WORK_START) return false; // před začátkem práce nezobrazuj
+  const d = new Date(dateStr + 'T12:00:00'); // noon avoids UTC offset issues
+  if (d < WORK_START) return false;
   const monday = getWeekMonday(d);
   const { days: workDays } = getWorkDaysInWeek(monday);
-  return workDays.some(wd => wd.toISOString().slice(0,10) === dateStr);
+  return workDays.some(wd =>
+    wd.getFullYear() === d.getFullYear() &&
+    wd.getMonth() === d.getMonth() &&
+    wd.getDate() === d.getDate()
+  );
 }
 
 function normalizeDate(v) {
@@ -1035,7 +1060,8 @@ function renderCal() {
     const dates = shifts.map(s => normalizeDate(s.date)).join(',');
     console.log('Worked dates:', dates);
   }
-  const today = new Date().toISOString().slice(0,10);
+  const _tn = new Date();
+  const today = `${_tn.getFullYear()}-${p2(_tn.getMonth()+1)}-${p2(_tn.getDate())}`;
   let start = new Date(year,month-1,1).getDay();
   start = start===0?6:start-1;
   const days = new Date(year,month,0).getDate();
@@ -1055,7 +1081,7 @@ function renderCal() {
     else if (isWe) cls+=' we';
     if (ds===today) cls+=' now';
     if (isWorked) cls+=' has';
-    else if (isPlanned) cls+=' has planned'; // reuse has (dot) styling, add planned for color
+    else if (isPlanned) cls+=' planned';
 
     div.className=cls;
     div.textContent=d;
@@ -1207,6 +1233,7 @@ function openSettings(){el('s-overlay').classList.add('on');el('s-panel').classL
 function closeSettings(){el('s-overlay').classList.remove('on');el('s-panel').classList.remove('on');}
 
 async function saveSettings() {
+  const oldRate = cfg.hourlyRate;
   cfg.kennitala=el('s-kt').value;
   cfg.hourlyRate=+el('s-hourly').value;
   cfg.taxRate=+el('s-tax').value;
@@ -1231,6 +1258,9 @@ async function saveSettings() {
     toast('Uloženo jen lokálně');
   }
   closeSettings(); render();
+  if (oldRate !== cfg.hourlyRate && confirm('Hodinová sazba se změnila. Přepočítat všechny existující směny?')) {
+    await recalcAllShifts(true);
+  }
 }
 
 // ── SCHEDULE ──
@@ -1272,8 +1302,8 @@ function getWorkDaysInWeek(monday) {
 
 
 // ── RECALC ALL SHIFTS ──
-async function recalcAllShifts() {
-  if (!confirm('Přepočítat všechny směny podle aktuálních sazeb?')) return;
+async function recalcAllShifts(skipConfirm = false) {
+  if (!skipConfirm && !confirm('Přepočítat všechny směny podle aktuálních sazeb?')) return;
   toast('Přepočítávám…');
   let total = 0;
 
