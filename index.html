@@ -836,9 +836,16 @@ async function doClockOut() {
   const endISO = nowISO.slice(0, 16);
   const c = calc(dateStr, startISO, endISO);
   stopClock();
-  const res = await api({ action:'clockOut', time:nowISO, grossISK:c.gross, netISK:c.net, hours:c.hrs, type:c.type });
+  const res = await api({ action:'clockOut', time:nowISO });
   clockStart = null;
-  if (res?.success) { toast('Směna uložena ✓'); await loadShifts(); }
+  if (res?.success) {
+    // Apps Script clockOut saves shift with 0 values — okamžitě přepíšeme správnými
+    if (res.shift?.id) {
+      await api({ action:'updateShift', id:res.shift.id, grossISK:c.gross, netISK:c.net, hours:c.hrs, type:c.type });
+    }
+    toast('Směna uložena ✓');
+    await loadShifts();
+  }
 }
 function startClock() {
   el('clock-btn').classList.add('on');
