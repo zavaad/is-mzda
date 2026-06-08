@@ -701,7 +701,7 @@ let URL_ = localStorage.getItem('su') || '';
 let cfg = { hourlyRate:2360, taxRate:36, pensionEmployee:4, unionFee:.85, kennitala:'' };
 let rate = 0.17;
 let rateEur = 0.0068; // fallback: 1 ISK ≈ 0.0068 EUR
-let curMonth = new Date().toISOString().slice(0,7);
+let curMonth = ''; // klíč fakturačního období "YYYY-MM" – nastaví se v init() (po definici konstant)
 let shifts = [];
 let clockStart = null;
 let clockIv = null;
@@ -712,8 +712,46 @@ const HOL = ['01-01','01-06','04-17','04-18','04-20','04-21','05-01','05-29','06
 const MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
 const DAYS = ['Ne','Po','Út','St','Čt','Pá','So'];
 
+// ── FAKTURAČNÍ OBDOBÍ 26.–25. ──
+// Období běží od 26. dne do 25. dne následujícího měsíce (25. = poslední den, včetně).
+// Označuje se rokem+měsícem KONCE období: období 26.5.–25.6. = "2026-06".
+const PERIOD_START_DAY = 26;        // první den období
+const OVERTIME_THRESHOLD = 172;     // hodin za období, nad nějž platí přesčas
+const OVERTIME_MULT = 1.90;         // přesčas = base × 1,90
+
+// Vrátí klíč období "YYYY-MM" pro dané datum (YYYY-MM-DD nebo Date)
+function periodKey(date) {
+  const d = (date instanceof Date) ? new Date(date) : new Date(normalizeDate(date) + 'T12:00:00');
+  let y = d.getFullYear(), m = d.getMonth(); // m: 0-11
+  if (d.getDate() >= PERIOD_START_DAY) { m += 1; if (m > 11) { m = 0; y += 1; } }
+  return y + '-' + p2(m + 1);
+}
+
+// Vrátí {start, end} (Date) hranice období pro klíč "YYYY-MM"
+function periodRange(key) {
+  const [y, m] = key.split('-').map(Number); // m = měsíc KONCE období (1-12)
+  // konec = 25. dne měsíce m; začátek = 26. dne předchozího měsíce
+  const end = new Date(y, m - 1, 25, 23, 59, 59, 999);
+  const start = new Date(y, m - 2, PERIOD_START_DAY, 0, 0, 0, 0);
+  return { start, end };
+}
+
+// Lidský popisek období, např. "26. 5. – 25. 6. 2026"
+function periodLabel(key) {
+  const { start, end } = periodRange(key);
+  return `${start.getDate()}. ${start.getMonth()+1}. – ${end.getDate()}. ${end.getMonth()+1}. ${end.getFullYear()}`;
+}
+
+// Patří datum do období daného klíčem?
+function inPeriod(dateStr, key) {
+  const { start, end } = periodRange(key);
+  const d = new Date(normalizeDate(dateStr) + 'T12:00:00');
+  return d >= start && d <= end;
+}
+
 // ── INIT ──
 async function init() {
+  curMonth = periodKey(new Date()); // klíč aktuálního fakturačního období
   if (screen.orientation?.lock) screen.orientation.lock('portrait').catch(() => {});
   loadLocal();
   loadLocalShifts();
@@ -787,9 +825,15 @@ async function loadShifts() {
     // Show cached instantly, then refresh from Sheets
     loadLocalShifts();
     render();
-    const res = await api({ action:'getShifts', month:curMonth });
+    const { start, end } = periodRange(curMonth);
+    const from = start.getFullYear()+'-'+p2(start.getMonth()+1)+'-'+p2(start.getDate());
+    const to   = end.getFullYear()+'-'+p2(end.getMonth()+1)+'-'+p2(end.getDate());
+    // Posíláme rozsah období (from/to) – Apps Script filtruje podle data směny.
+    // 'month' ponecháno jen pro zpětnou kompatibilitu starého backendu.
+    const res = await api({ action:'getShifts', from, to, period:curMonth, month:curMonth });
     if (res?.success) {
-      shifts = res.shifts||[];
+      // Pojistka: profiltruj na období i na frontendu (kdyby backend vrátil víc)
+      shifts = (res.shifts||[]).filter(s => inPeriod(s.date, curMonth));
       localStorage.setItem(getLocalKey(), JSON.stringify(shifts)); // update cache
       render();
     }
@@ -893,7 +937,8 @@ function getCurrentRate(dateStr, now) {
   const sal = baseRate * 153.86;
   const d = new Date(now);
   const dow = d.getDay();
-  const isWeekend = (dow === 0 || dow === 6);
+  const isSat = (dow === 6);
+  const isSun = (dow === 0);
   const mmdd = dateStr.slice(5);
   const isMajorHol = MAJOR_HOL.includes(mmdd)
     || (mmdd === '12-24' && d.getHours() >= 12)
@@ -903,7 +948,8 @@ function getCurrentRate(dateStr, now) {
   let rateNow;
   if (isMajorHol)       rateNow = sal * 0.01375;   // 2.12x
   else if (isPublicHol) rateNow = sal * 0.010385;  // 1.60x
-  else if (isWeekend)   rateNow = sal * 0.010385;  // 1.60x
+  else if (isSat)       rateNow = baseRate * 1.33; // sobota 1.33x
+  else if (isSun)       rateNow = baseRate * 1.45; // neděle 1.45x
   else {
     const h = d.getHours();
     if (h >= 0 && h < 7)        rateNow = sal * 0.009375; // 1.44x noční
@@ -937,15 +983,15 @@ function tickClock() {
   }
 }
 
-// ── CALC ──
-// Sazby dle kolektivní smlouvy VR/FA 2024-2028:
-// Denní (Po-Pá 7:00-19:00): mzda / 153.86
-// After-hours (Po-Pá mimo 7-19): 0.875% měs. mzdy/hod (do 153.86h/měs), pak 1.0385%
-// Noční (0:00-7:00): 0.9375% měs. mzdy/hod
-// Víkend (So/Ne): 1.0385% měs. mzdy/hod (min 4h)
-// Major svátek: 1.375% měs. mzdy/hod
-// MAJOR svátky: Nový rok, Velký pátek, Hod boží velikonoční, Letnice, 17.6., první Po v srpnu, 25.12., po 12:00 24.12 a 31.12
-// PUBLIC (non-major) svátky: Zelený čtvrtek, Pondělí velikonoční, První den léta, 1.5., Nanebevstoupení, Pondělí svatodušní, 2. svátek vánoční
+// ── CALC (per-směna, „naivní" – nezná součet období) ──
+// Přesčasy nad 172h/období se NEpočítají zde, ale v applyOvertime() při zobrazení.
+// Denní (Po-Pá 7:00-19:00): base × 1,00
+// Večerní (Po-Pá 19:00-24:00): 0.875% měs. mzdy/hod (~1,35×)
+// Noční (0:00-7:00): 0.9375% měs. mzdy/hod (~1,44×)
+// Sobota: base × 1,33 (min 4h)
+// Neděle: base × 1,45 (min 4h)
+// Public svátek: 1.0385% měs. mzdy/hod (~1,60×, min 4h)
+// Major svátek: 1.375% měs. mzdy/hod (~2,12×)
 const MAJOR_HOL = ['01-01','04-18','04-20','06-08','06-17','12-25'];
 // 24.12 po 12:00 a 31.12 po 12:00 řešíme v kódu zvlášť
 
@@ -965,7 +1011,9 @@ function calc(dateStr, s0, e0) {
   const s = new Date(s0), e = new Date(e0);
   const totalHrs = (e - s) / 3600000;
   const dow = s.getDay();
-  const isWeekend = (dow === 0 || dow === 6);
+  const isSat = (dow === 6);
+  const isSun = (dow === 0);
+  const isWeekend = isSat || isSun;
   const mmdd = dateStr.slice(5);
   const isMajorHol = MAJOR_HOL.includes(mmdd)
     || (mmdd === '12-24' && s.getHours() >= 12)
@@ -985,11 +1033,16 @@ function calc(dateStr, s0, e0) {
     const billableHrs = Math.max(totalHrs, 4);
     gross = overtimeRate * billableHrs;
     typeLabel = 'svátek';
-  } else if (isWeekend) {
-    // Víkend: 1,0385 %, min 4h
+  } else if (isSat) {
+    // Sobota: příplatek 33 % → base × 1,33, min 4h
     const billableHrs = Math.max(totalHrs, 4);
-    gross = overtimeRate * billableHrs;
-    typeLabel = 'víkend';
+    gross = baseRate * 1.33 * billableHrs;
+    typeLabel = 'sobota';
+  } else if (isSun) {
+    // Neděle: příplatek 45 % → base × 1,45, min 4h
+    const billableHrs = Math.max(totalHrs, 4);
+    gross = baseRate * 1.45 * billableHrs;
+    typeLabel = 'neděle';
   } else {
     // Pracovní den - rozdělíme po hodinách
     // Denní: 7:00-19:00 → baseRate
@@ -1034,29 +1087,80 @@ function calc(dateStr, s0, e0) {
     hrs: Math.round(totalHrs * 100) / 100,
     gross: Math.round(gross),
     net: Math.round(net),
-    type: typeLabel
+    type: typeLabel,
+    _rawHrs: totalHrs,    // nezaokrouhlené hodiny (pro přesčasový přepočet)
+    _rawGross: gross,     // nezaokrouhlený hrubý (pro přesčasový přepočet)
+    _ded: ded             // odečtová sazba (daně+penze+odbory)
   };
 }
 
+// ── PŘESČASY ZA OBDOBÍ ──
+// Kontextový (živý) přepočet: seřadí směny období chronologicky, sčítá hodiny,
+// a každou hodinu nad OVERTIME_THRESHOLD (172h) přepíše na base × 1,90 BEZ OHLEDU NA TYP.
+// Nemutuje uložená data – vrací nové pole směn s upravenými grossISK/netISK pro zobrazení.
+function applyOvertime(list) {
+  const baseRate = +cfg.hourlyRate || 2360;
+  const otHourly = baseRate * OVERTIME_MULT;
+  // seřaď chronologicky podle začátku (fallback na datum)
+  const sorted = [...list].sort((a, b) => {
+    const ka = (a.start || a.date || '').toString();
+    const kb = (b.start || b.date || '').toString();
+    return ka.localeCompare(kb);
+  });
+  let cum = 0; // kumulativní hodiny v období
+  return sorted.map(s => {
+    const hrs = +s.hours || 0;
+    if (hrs <= 0) return { ...s, _ot: 0 };
+    const rawGross = +s.grossISK || 0;
+    const hoursBefore = cum;
+    cum += hrs;
+    // kolik hodin této směny spadá nad práh
+    const otHrs = Math.max(0, cum - Math.max(OVERTIME_THRESHOLD, hoursBefore));
+    if (otHrs <= 0) return { ...s, _ot: 0 };
+    const normalHrs = hrs - otHrs;
+    // hrubý za normální část = poměrná část původního hrubého (zachová typovou sazbu),
+    // přesčasová část = otHrs × base × 1,90
+    const normalGross = rawGross * (normalHrs / hrs);
+    const newGross = normalGross + otHrs * otHourly;
+    const ded = (+cfg.taxRate/100) + (+cfg.pensionEmployee/100) + (+cfg.unionFee/100);
+    return {
+      ...s,
+      grossISK: Math.round(newGross),
+      netISK: Math.round(newGross * (1 - ded)),
+      _ot: otHrs,
+      _otGross: Math.round(otHrs * otHourly)
+    };
+  });
+}
+
+// Vrátí směny aktuálního období s aplikovaným přesčasem (pro render a agregaci)
+function periodShifts() {
+  return applyOvertime(shifts);
+}
+
 // ── RENDER ──
-function render() { renderDash(); renderCal(); renderList(); }
+function render() {
+  if (!curMonth) curMonth = periodKey(new Date()); // pojistka proti prázdnému klíči
+  renderDash(); renderCal(); renderList();
+}
 
 function renderDash() {
   const [y,m] = curMonth.split('-').map(Number);
-  el('hero-lbl').textContent = `${MONTHS[m-1]} ${y} – čistá mzda`;
+  el('hero-lbl').textContent = `${periodLabel(curMonth)} – čistá mzda`;
   el('k-display').textContent = cfg.kennitala || '—';
-  let gross=0, net=0, hours=0;
-  shifts.forEach(s => { gross+=+s.grossISK||0; net+=+s.netISK||0; hours+=+s.hours||0; });
+  const adj = periodShifts(); // směny s aplikovaným přesčasem
+  let gross=0, net=0, hours=0, otHrs=0;
+  adj.forEach(s => { gross+=+s.grossISK||0; net+=+s.netISK||0; hours+=+s.hours||0; otHrs+=+s._ot||0; });
   el('earn-czk').textContent = N(Math.round(net*rate));
   el('earn-eur').textContent = net > 0 ? N(Math.round(net*rateEur)) + ' €' : '';
   el('s-net').textContent = N(Math.round(net));
   el('s-gross').textContent = N(Math.round(gross));
-  el('s-hours').textContent = hours.toFixed(1);
+  el('s-hours').textContent = hours.toFixed(1) + (otHrs > 0 ? ` (${otHrs.toFixed(1)}h ⏱)` : '');
   const hczk = hours>0 ? Math.round((net*rate)/hours) : 0;
   el('b-hczk').textContent = N(hczk)+' Kč';
   el('b-ded').textContent = N(Math.round(gross-net));
   el('b-pen').textContent = N(Math.round(gross*0.155));
-  el('b-avg').textContent = shifts.length ? N(Math.round(net/shifts.length)) : '—';
+  el('b-avg').textContent = adj.length ? N(Math.round(net/adj.length)) : '—';
 }
 
 function isPlannedWorkDay(dateStr) {
@@ -1088,8 +1192,7 @@ function normalizeDate(v) {
 }
 
 function renderCal() {
-  const [year,month] = curMonth.split('-').map(Number);
-  el('m-lbl').textContent = `${MONTHS[month-1]} ${year}`;
+  el('m-lbl').textContent = periodLabel(curMonth);
   const grid = el('cal'); grid.innerHTML = '';
   // Normalize shift dates to YYYY-MM-DD
   const workedMap = {};
@@ -1097,23 +1200,21 @@ function renderCal() {
     const d = normalizeDate(s.date);
     if (d) workedMap[d] = true;
   });
-  // Show debug info on rate-sub line
-  if (shifts.length > 0) {
-    const dates = shifts.map(s => normalizeDate(s.date)).join(',');
-    console.log('Worked dates:', dates);
-  }
   const _tn = new Date();
   const today = `${_tn.getFullYear()}-${p2(_tn.getMonth()+1)}-${p2(_tn.getDate())}`;
-  let start = new Date(year,month-1,1).getDay();
-  start = start===0?6:start-1;
-  const days = new Date(year,month,0).getDate();
 
-  for (let i=0;i<start;i++) { const d=document.createElement('div'); d.className='cd emp'; grid.appendChild(d); }
-  for (let d=1;d<=days;d++) {
-    const ds=`${year}-${p2(month)}-${p2(d)}`;
-    const dow=new Date(year,month-1,d).getDay();
+  const { start, end } = periodRange(curMonth);
+  // odsazení: pondělí=0 .. neděle=6
+  let lead = start.getDay(); lead = lead===0?6:lead-1;
+  for (let i=0;i<lead;i++) { const d=document.createElement('div'); d.className='cd emp'; grid.appendChild(d); }
+
+  const cur = new Date(start);
+  while (cur <= end) {
+    const yy=cur.getFullYear(), mm=cur.getMonth()+1, dd=cur.getDate();
+    const ds=`${yy}-${p2(mm)}-${p2(dd)}`;
+    const dow=cur.getDay();
     const isWe=dow===0||dow===6;
-    const isHol=HOL.includes(`${p2(month)}-${p2(d)}`);
+    const isHol=HOL.includes(`${p2(mm)}-${p2(dd)}`);
     const isWorked=workedMap[ds];
     const isPlanned=!isWorked && isPlannedWorkDay(ds);
 
@@ -1126,10 +1227,12 @@ function renderCal() {
     else if (isPlanned) cls+=' planned';
 
     div.className=cls;
-    div.textContent=d;
+    div.textContent=dd;
     if (isWorked) { const dot=document.createElement('span'); dot.className='cal-dot'; div.appendChild(dot); }
     div.onclick=()=>openModal(ds);
     grid.appendChild(div);
+
+    cur.setDate(cur.getDate()+1);
   }
 }
 
@@ -1139,28 +1242,31 @@ function renderList() {
     list.innerHTML='<div class="empty-hint">Klikni na den v kalendáři<br>pro přidání směny.</div>';
     return;
   }
-  const sorted=[...shifts].sort((a,b)=>b.date.localeCompare(a.date));
+  const adj = periodShifts();
+  const sorted=[...adj].sort((a,b)=>b.date.localeCompare(a.date));
   list.innerHTML=sorted.map(s => {
     const st=tISO(s.start), et=tISO(s.end);
     const czk=N(Math.round(+s.netISK*rate));
     const dn=DAYS[new Date(s.date+'T12:00:00').getDay()];
-    const dc=s.type==='víkend'?'we':s.type==='svátek'?'hol':'wd';
+    const isWe = s.type==='sobota'||s.type==='neděle'||s.type==='víkend';
+    const dc = isWe?'we':(s.type==='svátek'||s.type==='major svátek')?'hol':'wd';
     const dp=s.date.split('-'); const dateDisp=`${+dp[2]}. ${+dp[1]}.`;
+    const otTag = (+s._ot>0) ? ` · ⏱${(+s._ot).toFixed(1)}h` : '';
     return `<div class="sitem">
       <div class="sdot ${dc}"></div>
       <div class="sdate"><div class="sdate-main">${dateDisp}</div><div class="sdate-sub">${dn}</div></div>
-      <div class="stime">${st}–${et} · ${(+s.hours).toFixed(1)}h</div>
+      <div class="stime">${st}–${et} · ${(+s.hours).toFixed(1)}h${otTag}</div>
       <div class="spay"><div class="spay-czk">~${czk} Kč</div><div class="spay-isk">${N(s.netISK)} ISK</div></div>
       <button class="sdel" onclick="delShift('${s.id}')">×</button>
     </div>`;
   }).join('');
 }
 
-// ── MONTH NAV ──
+// ── NAVIGACE OBDOBÍ ──
 function chMonth(dir) {
   const [y,m]=curMonth.split('-').map(Number);
-  const d=new Date(y,m-1+dir,1);
-  curMonth=d.toISOString().slice(0,7);
+  const d=new Date(y, m-1+dir, 1); // posun o jedno období (klíč = konec období)
+  curMonth = d.getFullYear() + '-' + p2(d.getMonth()+1);
   loadShifts();
 }
 
@@ -1253,10 +1359,10 @@ async function delShift(id) {
 }
 
 // ── LOCAL STORAGE FOR SHIFTS ──
-function getLocalKey() { return 'shifts_' + curMonth; }
+function getLocalKey() { return 'shifts_' + curMonth; } // curMonth = klíč období
 
 function saveLocalShift(shift) {
-  const key = 'shifts_' + shift.date.slice(0,7);
+  const key = 'shifts_' + periodKey(shift.date); // ulož pod klíč OBDOBÍ, ne kal. měsíce
   const all = JSON.parse(localStorage.getItem(key)||'[]');
   all.push(shift);
   localStorage.setItem(key, JSON.stringify(all));
@@ -1352,18 +1458,26 @@ async function recalcAllShifts(skipConfirm = false) {
   let total = 0;
 
   if (URL_) {
-    // Recalc in Sheets: načti všechny měsíce (posledních 12)
+    // Recalc in Sheets: projdi posledních 12 období (klíč = konec období)
     const today = new Date();
+    const baseKey = periodKey(today);
+    const [by, bm] = baseKey.split('-').map(Number);
+    const seen = new Set();
     for (let i = 0; i < 12; i++) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const month = d.toISOString().slice(0,7);
-      const res = await api({ action:'getShifts', month });
+      const d = new Date(by, bm - 1 - i, 1);
+      const key = d.getFullYear() + '-' + p2(d.getMonth()+1);
+      const { start, end } = periodRange(key);
+      const from = start.getFullYear()+'-'+p2(start.getMonth()+1)+'-'+p2(start.getDate());
+      const to   = end.getFullYear()+'-'+p2(end.getMonth()+1)+'-'+p2(end.getDate());
+      const res = await api({ action:'getShifts', from, to, period:key, month:key });
       if (!res?.success || !res.shifts?.length) continue;
 
       for (const s of res.shifts) {
         if (!s.start || !s.end) continue;
+        if (seen.has(s.id)) continue; // období se nepřekrývají, ale pro jistotu
+        seen.add(s.id);
         const c = calc(s.date, s.start, s.end);
-        // Send pre-calculated values directly – bypasses Apps Script's old calc
+        // Ukládáme SYROVÉ hodnoty (bez přesčasu) – přesčas se aplikuje až při zobrazení
         await api({
           action: 'updateShift',
           id: s.id,
