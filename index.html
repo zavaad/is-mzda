@@ -610,6 +610,11 @@ hr {
         <div class="bcard-val" id="b-avg">—</div>
         <div class="bcard-sub">čistě ISK</div>
       </div>
+      <div class="bcard">
+        <div class="bcard-lbl">Orlof</div>
+        <div class="bcard-val" id="b-orlof">—</div>
+        <div class="bcard-sub">10,17% hrubé (v ceně)</div>
+      </div>
     </div>
   </div>
 
@@ -640,6 +645,10 @@ hr {
   </div>
   <div class="sg">
     <label class="sl">Odbory (%)</label><input type="number" class="si" id="s-uni" value="0.85">
+  </div>
+  <div class="sg">
+    <label class="sl">Orlof (%)</label><input type="number" class="si" id="s-orlof" value="10.17" step="0.01">
+    <div style="font-size:11px;color:var(--muted);margin-top:5px">Dovolenková náhrada z hrubého (vč. příplatků a přesčasů)</div>
   </div>
 
   <div class="s-sec">Google Sheets</div>
@@ -698,7 +707,7 @@ hr {
 <script>
 // ── STATE ──
 let URL_ = localStorage.getItem('su') || '';
-let cfg = { hourlyRate:2360, taxRate:36, pensionEmployee:4, unionFee:.85, kennitala:'' };
+let cfg = { hourlyRate:2360, taxRate:36, pensionEmployee:4, unionFee:.85, orlofRate:10.17, kennitala:'' };
 let rate = 0.17;
 let rateEur = 0.0068; // fallback: 1 ISK ≈ 0.0068 EUR
 let curMonth = ''; // klíč fakturačního období "YYYY-MM" – nastaví se v init() (po definici konstant)
@@ -718,6 +727,14 @@ const DAYS = ['Ne','Po','Út','St','Čt','Pá','So'];
 const PERIOD_START_DAY = 26;        // první den období
 const OVERTIME_THRESHOLD = 172;     // hodin za období, nad nějž platí přesčas
 const OVERTIME_MULT = 1.90;         // přesčas = base × 1,90
+// Příplatkové násobky (čistě z base sazby, NEkombinují se – bere se vždy nejvyšší)
+const EVENING_FROM  = 17;           // od 17:00 platí večerní příplatek
+const EVENING_MULT  = 1.33;         // 17:00–24:00 → base × 1,33
+const NIGHT_MULT    = 1.45;         // 00:00–07:00 → base × 1,45
+const SAT_MULT      = 1.33;         // sobota → base × 1,33
+const SUN_MULT      = 1.45;         // neděle → base × 1,45
+const PUBHOL_MULT   = 1.60;         // svátek → base × 1,60
+const MAJORHOL_MULT = 2.12;         // velký svátek → base × 2,12
 
 // Vrátí klíč období "YYYY-MM" pro dané datum (YYYY-MM-DD nebo Date)
 function periodKey(date) {
@@ -775,6 +792,7 @@ function setForm() {
   el('s-tax').value = cfg.taxRate;
   el('s-pen').value = cfg.pensionEmployee;
   el('s-uni').value = cfg.unionFee;
+  el('s-orlof').value = (cfg.orlofRate != null ? cfg.orlofRate : 10.17);
   el('s-kt').value = cfg.kennitala || '';
 }
 
@@ -815,7 +833,7 @@ async function loadCfg() {
   const res = await api({ action:'getSettings' });
   if (res?.success) {
     Object.assign(cfg, res.settings);
-    ['hourlyRate','taxRate','pensionEmployee','unionFee'].forEach(k => { if(cfg[k]) cfg[k]=parseFloat(cfg[k]); });
+    ['hourlyRate','taxRate','pensionEmployee','unionFee','orlofRate'].forEach(k => { if(cfg[k]) cfg[k]=parseFloat(cfg[k]); });
     localStorage.setItem('cfg', JSON.stringify(cfg));
     setForm();
   }
@@ -933,8 +951,8 @@ function stopClock() {
 }
 function getCurrentRate(dateStr, now) {
   // Vrátí aktuální hodinovou sazbu (ISK/hod) a násobek vs základní sazba
+  // Bere se vždy NEJVYŠŠÍ aplikovatelný příplatek (nekombinuje se).
   const baseRate = +cfg.hourlyRate || 2360;
-  const sal = baseRate * 153.86;
   const d = new Date(now);
   const dow = d.getDay();
   const isSat = (dow === 6);
@@ -944,20 +962,19 @@ function getCurrentRate(dateStr, now) {
     || (mmdd === '12-24' && d.getHours() >= 12)
     || (mmdd === '12-31' && d.getHours() >= 12);
   const isPublicHol = HOL.includes(mmdd);
+  const h = d.getHours();
 
-  let rateNow;
-  if (isMajorHol)       rateNow = sal * 0.01375;   // 2.12x
-  else if (isPublicHol) rateNow = sal * 0.010385;  // 1.60x
-  else if (isSat)       rateNow = baseRate * 1.33; // sobota 1.33x
-  else if (isSun)       rateNow = baseRate * 1.45; // neděle 1.45x
-  else {
-    const h = d.getHours();
-    if (h >= 0 && h < 7)        rateNow = sal * 0.009375; // 1.44x noční
-    else if (h >= 19 && h < 24) rateNow = sal * 0.00875;  // 1.35x večerní
-    else                        rateNow = baseRate;        // 1.00x denní
-  }
-  const multiplier = rateNow / baseRate;
-  return { rateIsk: Math.round(rateNow), multiplier };
+  let mult = 1.0;
+  if (isMajorHol)            mult = MAJORHOL_MULT;        // 2.12x
+  else if (isPublicHol)      mult = PUBHOL_MULT;          // 1.60x
+  else if (isSat)            mult = SAT_MULT;             // sobota 1.33x
+  else if (isSun)            mult = SUN_MULT;             // neděle 1.45x
+  else if (h >= 0 && h < 7)  mult = NIGHT_MULT;           // noční 1.45x
+  else if (h >= EVENING_FROM && h < 24) mult = EVENING_MULT; // večerní (od 17:00) 1.33x
+  else                       mult = 1.0;                  // denní
+
+  const rateNow = baseRate * mult;
+  return { rateIsk: Math.round(rateNow), multiplier: mult };
 }
 
 function tickClock() {
@@ -996,88 +1013,64 @@ const MAJOR_HOL = ['01-01','04-18','04-20','06-08','06-17','12-25'];
 // 24.12 po 12:00 a 31.12 po 12:00 řešíme v kódu zvlášť
 
 function calc(dateStr, s0, e0) {
-  // Sazby odvozené od základní hodinové sazby (denní)
-  // Poměry dle VR kolektivní smlouvy: after-hours = 0.875%/base_rate_% = cca 1.346x denní sazby atd.
-  // Přesnější: použijeme poměry přímo z procentuálních sazeb
-  // base = hourlyRate (denní sazba, divisor 153.86)
-  // sal = hourlyRate * 153.86 (zpětně odvozená měsíční pro výpočet % sazeb)
-  const baseRate       = +cfg.hourlyRate || 2360;
-  const sal            = baseRate * 153.86; // odvozená měsíční pro % výpočty
-  const afterHoursRate = sal * 0.00875;  // 0.875% měs. mzdy = ~1.346x denní
-  const overtimeRate   = sal * 0.010385; // 1.0385% měs. mzdy = ~1.597x denní
-  const nightRate      = sal * 0.009375; // 0.9375% měs. mzdy = ~1.441x denní
-  const majorHolRate   = sal * 0.01375;  // 1.375% měs. mzdy = ~2.115x denní
+  // Sazby: vše čistě z base hodinové sazby. Za každou hodinu se bere
+  // NEJVYŠŠÍ aplikovatelný příplatek, příplatky se nekombinují.
+  // Orlof (+10,17 %) se NEpočítá zde – přičítá se z finálního hrubého
+  // až po přesčasech v applyOvertime() / agregaci.
+  const baseRate = +cfg.hourlyRate || 2360;
 
   const s = new Date(s0), e = new Date(e0);
   const totalHrs = (e - s) / 3600000;
   const dow = s.getDay();
   const isSat = (dow === 6);
   const isSun = (dow === 0);
-  const isWeekend = isSat || isSun;
   const mmdd = dateStr.slice(5);
   const isMajorHol = MAJOR_HOL.includes(mmdd)
     || (mmdd === '12-24' && s.getHours() >= 12)
     || (mmdd === '12-31' && s.getHours() >= 12);
+  const isPublicHol = HOL.includes(mmdd);
 
   let gross = 0;
   let typeLabel = 'pracovní den';
 
-  const isPublicHol = HOL.includes(mmdd);
-
   if (isMajorHol) {
-    // Major svátek: 1,375 % měs. mzdy/hod
-    gross = majorHolRate * totalHrs;
+    gross = baseRate * MAJORHOL_MULT * totalHrs;
     typeLabel = 'major svátek';
   } else if (isPublicHol) {
-    // Public svátek (non-major): stejná sazba jako víkend 1,0385 %
     const billableHrs = Math.max(totalHrs, 4);
-    gross = overtimeRate * billableHrs;
+    gross = baseRate * PUBHOL_MULT * billableHrs;
     typeLabel = 'svátek';
   } else if (isSat) {
-    // Sobota: příplatek 33 % → base × 1,33, min 4h
     const billableHrs = Math.max(totalHrs, 4);
-    gross = baseRate * 1.33 * billableHrs;
+    gross = baseRate * SAT_MULT * billableHrs;
     typeLabel = 'sobota';
   } else if (isSun) {
-    // Neděle: příplatek 45 % → base × 1,45, min 4h
     const billableHrs = Math.max(totalHrs, 4);
-    gross = baseRate * 1.45 * billableHrs;
+    gross = baseRate * SUN_MULT * billableHrs;
     typeLabel = 'neděle';
   } else {
-    // Pracovní den - rozdělíme po hodinách
-    // Denní: 7:00-19:00 → baseRate
-    // After-hours: 19:00-24:00 a 0:00-7:00 → afterHoursRate (0.875%)
-    // Noční: 0:00-7:00 → nightRate (0.9375%) - noční je vyšší než after-hours, použijeme ji
-    // V praxi iterujeme minutu po minutě nebo počítáme úseky
-    const dayStart = new Date(s); dayStart.setHours(7,0,0,0);
-    const dayEnd   = new Date(s); dayEnd.setHours(19,0,0,0);
-    const nightEnd = new Date(s); nightEnd.setHours(7,0,0,0);
-    const nextDayNightEnd = new Date(s); nextDayNightEnd.setDate(nextDayNightEnd.getDate()+1); nextDayNightEnd.setHours(7,0,0,0);
-
-    // Úsek 1: denní 7-19
-    const d1s = Math.max(s.getTime(), dayStart.getTime());
-    const d1e = Math.min(e.getTime(), dayEnd.getTime());
-    const dayHrs = Math.max(0, (d1e - d1s) / 3600000);
-
-    // Úsek 2: večer 19-24
-    const eveStart = new Date(s); eveStart.setHours(19,0,0,0);
-    const eveEnd   = new Date(s); eveEnd.setHours(24,0,0,0);
-    const e2s = Math.max(s.getTime(), eveStart.getTime());
-    const e2e = Math.min(e.getTime(), eveEnd.getTime());
-    const eveHrs = Math.max(0, (e2e - e2s) / 3600000);
-
-    // Úsek 3: noční 0-7 (přes půlnoc)
-    const n3s = Math.max(s.getTime(), eveEnd.getTime()); // od půlnoci
-    const n3e = Math.min(e.getTime(), nextDayNightEnd.getTime());
-    const nightHrs = Math.max(0, (n3e - n3s) / 3600000);
-
-    // Ranní noční (pokud směna začíná před 7:00)
-    const earlyNightHrs = Math.max(0, Math.min(e.getTime(), dayStart.getTime()) - s.getTime()) / 3600000;
-
-    gross = dayHrs * baseRate
-          + eveHrs * afterHoursRate
-          + nightHrs * nightRate
-          + earlyNightHrs * nightRate;
+    // Pracovní den (Po–Pá): rozseč směnu po hodinových úsecích.
+    // Pro každý okamžik vezmi multiplikátor podle hodiny:
+    //   00:00–07:00 → noční ×1,45
+    //   07:00–17:00 → denní ×1,00
+    //   17:00–24:00 → večerní ×1,33
+    // Iterujeme po minutových krocích kvůli přesnosti na hranicích.
+    const stepMs = 60000; // 1 minuta
+    let t = s.getTime();
+    const end = e.getTime();
+    let acc = 0;
+    while (t < end) {
+      const next = Math.min(t + stepMs, end);
+      const frac = (next - t) / 3600000; // délka kroku v hodinách
+      const hod = new Date(t).getHours();
+      let mult;
+      if (hod >= 0 && hod < 7)              mult = NIGHT_MULT;   // 1,45
+      else if (hod >= EVENING_FROM && hod < 24) mult = EVENING_MULT; // 1,33
+      else                                  mult = 1.0;         // denní
+      acc += frac * mult;
+      t = next;
+    }
+    gross = baseRate * acc;
     typeLabel = 'pracovní den';
   }
 
@@ -1101,34 +1094,47 @@ function calc(dateStr, s0, e0) {
 function applyOvertime(list) {
   const baseRate = +cfg.hourlyRate || 2360;
   const otHourly = baseRate * OVERTIME_MULT;
+  const orlofRate = (+cfg.orlofRate || 0) / 100; // např. 0.1017
   // seřaď chronologicky podle začátku (fallback na datum)
   const sorted = [...list].sort((a, b) => {
     const ka = (a.start || a.date || '').toString();
     const kb = (b.start || b.date || '').toString();
     return ka.localeCompare(kb);
   });
+  const ded = (+cfg.taxRate/100) + (+cfg.pensionEmployee/100) + (+cfg.unionFee/100);
   let cum = 0; // kumulativní hodiny v období
   return sorted.map(s => {
     const hrs = +s.hours || 0;
-    if (hrs <= 0) return { ...s, _ot: 0 };
     const rawGross = +s.grossISK || 0;
+    if (hrs <= 0) {
+      // i nulové/manuální položky dostanou orlof z jejich hrubého
+      const orlof = rawGross * orlofRate;
+      const g = rawGross + orlof;
+      return { ...s, grossISK: Math.round(g), netISK: Math.round(g*(1-ded)), _ot: 0, _orlof: Math.round(orlof) };
+    }
     const hoursBefore = cum;
     cum += hrs;
     // kolik hodin této směny spadá nad práh
     const otHrs = Math.max(0, cum - Math.max(OVERTIME_THRESHOLD, hoursBefore));
-    if (otHrs <= 0) return { ...s, _ot: 0 };
-    const normalHrs = hrs - otHrs;
-    // hrubý za normální část = poměrná část původního hrubého (zachová typovou sazbu),
-    // přesčasová část = otHrs × base × 1,90
-    const normalGross = rawGross * (normalHrs / hrs);
-    const newGross = normalGross + otHrs * otHourly;
-    const ded = (+cfg.taxRate/100) + (+cfg.pensionEmployee/100) + (+cfg.unionFee/100);
+    // hrubý po přesčasu (před orlofem)
+    let postOtGross;
+    if (otHrs <= 0) {
+      postOtGross = rawGross;
+    } else {
+      const normalHrs = hrs - otHrs;
+      const normalGross = rawGross * (normalHrs / hrs);
+      postOtGross = normalGross + otHrs * otHourly;
+    }
+    // orlof z finálního hrubého (až po přesčasu)
+    const orlof = postOtGross * orlofRate;
+    const finalGross = postOtGross + orlof;
     return {
       ...s,
-      grossISK: Math.round(newGross),
-      netISK: Math.round(newGross * (1 - ded)),
+      grossISK: Math.round(finalGross),
+      netISK: Math.round(finalGross * (1 - ded)),
       _ot: otHrs,
-      _otGross: Math.round(otHrs * otHourly)
+      _otGross: Math.round(otHrs * otHourly),
+      _orlof: Math.round(orlof)
     };
   });
 }
@@ -1149,8 +1155,8 @@ function renderDash() {
   el('hero-lbl').textContent = `${periodLabel(curMonth)} – čistá mzda`;
   el('k-display').textContent = cfg.kennitala || '—';
   const adj = periodShifts(); // směny s aplikovaným přesčasem
-  let gross=0, net=0, hours=0, otHrs=0;
-  adj.forEach(s => { gross+=+s.grossISK||0; net+=+s.netISK||0; hours+=+s.hours||0; otHrs+=+s._ot||0; });
+  let gross=0, net=0, hours=0, otHrs=0, orlof=0;
+  adj.forEach(s => { gross+=+s.grossISK||0; net+=+s.netISK||0; hours+=+s.hours||0; otHrs+=+s._ot||0; orlof+=+s._orlof||0; });
   el('earn-czk').textContent = N(Math.round(net*rate));
   el('earn-eur').textContent = net > 0 ? N(Math.round(net*rateEur)) + ' €' : '';
   el('s-net').textContent = N(Math.round(net));
@@ -1159,8 +1165,9 @@ function renderDash() {
   const hczk = hours>0 ? Math.round((net*rate)/hours) : 0;
   el('b-hczk').textContent = N(hczk)+' Kč';
   el('b-ded').textContent = N(Math.round(gross-net));
-  el('b-pen').textContent = N(Math.round(gross*0.155));
+  el('b-pen').textContent = N(Math.round((gross-orlof)*0.155));
   el('b-avg').textContent = adj.length ? N(Math.round(net/adj.length)) : '—';
+  el('b-orlof').textContent = N(Math.round(orlof));
 }
 
 function isPlannedWorkDay(dateStr) {
@@ -1389,6 +1396,7 @@ async function saveSettings() {
   cfg.taxRate=+el('s-tax').value;
   cfg.pensionEmployee=+el('s-pen').value;
   cfg.unionFee=+el('s-uni').value;
+  cfg.orlofRate=+el('s-orlof').value;
   URL_=el('s-url').value.trim();
   localStorage.setItem('su',URL_);
   localStorage.setItem('cfg',JSON.stringify(cfg));
